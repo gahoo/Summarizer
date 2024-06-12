@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -ex
+
+SCRIPT_PATH=$(dirname $(realpath "$0"))
+extra_args=${extra_args:-}
+lang=${lang:-zh}
+
+download_sub(){
+    yt-dlp $extra_args --write-subs --convert-subs srt --skip-download "$1" |grep "Writing video subtitles to"|cut -f2 -d":"|sed -e 's#^ ##g' -e 's#vtt#srt#g'
+}
+
+download_autosub(){
+    yt-dlp $extra_args --write-auto-subs --convert-subs srt --skip-download "$1" |grep "Writing video subtitles to"|cut -f2 -d":"|sed -e 's#^ ##g' -e 's#vtt#srt#g'
+}
+
+download_audio(){
+    yt-dlp $extra_args -f 139 "$1" > dlp.log
+    audio=$(cat dlp.log|grep "Destination:"|cut -f2 -d":"|sed 's#^ ##g')
+    [ -z "$audio" ] && audio=$(cat dlp.log|grep " has already been downloaded"|sed -e "s#\[download\] ##g" -e "s# has already been downloaded##g")
+    [ -z "$audio" ] || http_proxy="" https_proxy="" lang=$lang whisper "$audio" > whisper.log && echo ${audio/%m4a/$lang.srt}
+}
+
+
+subtitle=$(download_sub $1)
+[ -z "$subtitle" ] && subtitle=$(download_autosub $1)
+[ -z "$subtitle" ] && subtitle=$(download_audio $1)
+[ -z "$subtitle" ] || srt2txt "$subtitle"
+[ -z "$subtitle" ] || source $SCRIPT_PATH/env/bin/activate && http_proxy=http://127.0.0.1:8118 https_proxy=http://127.0.0.1:8118 python3 Summarize.py --file "${subtitle/%srt/txt}" --model models/gemini-1.5-flash --question --save_history
