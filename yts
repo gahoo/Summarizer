@@ -26,4 +26,4 @@ subtitle=$(download_sub $1)
 [ -z "$subtitle" ] && subtitle=$(download_autosub $1)
 [ -z "$subtitle" ] && subtitle=$(download_audio $1)
 [ -z "$subtitle" ] || srt2txt "$subtitle"
-[ -z "$subtitle" ] || source $SCRIPT_PATH/env/bin/activate && http_proxy=http://127.0.0.1:8118 https_proxy=http://127.0.0.1:8118 python3 Summarize.py --file "${subtitle/%srt/txt}" --model models/gemini-1.5-flash --question --save_history
+[ -z "$subtitle" ] || source $SCRIPT_PATH/env/bin/activate && http_proxy=http://127.0.0.1:8118 https_proxy=http://127.0.0.1:8118 python3 $SCRIPT_PATH/Summarize.py --file "${subtitle/%srt/txt}" --model models/gemini-1.5-flash --question --save_history
