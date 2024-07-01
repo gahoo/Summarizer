@@ -6,9 +6,10 @@ import atexit
 import json
 import time
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from IPython.display import Markdown
 from dotenv import load_dotenv
 from pathlib import Path
+from subtitle_downloader import download_subtitle_or_audio
+
 
 def save_history_before_exit(chat, ready_files):
     def history2json(history):
@@ -31,7 +32,7 @@ def save_history_before_exit(chat, ready_files):
                 prefix = "> "
             else:
                 prefix = ""
-            md.append("\n".join([format_part_markdown(part, prefix) for part in entry.parts]))
+            md.append("\n\n".join([format_part_markdown(part, prefix) for part in entry.parts]))
         return "\n\n".join(md)
     
     def format_part_markdown(part, prefix):
@@ -40,11 +41,15 @@ def save_history_before_exit(chat, ready_files):
         else:
             return prefix + part.text
 
-    if len(args.file) > 1:
+    if args.file is None and args.url:
+        dirname = "./"
+        basename = "+".join([os.path.basename(f.display_name) for f in ready_files])
+    elif len(args.file) > 1:
         dirname = os.path.commonpath(args.file)
+        basename = "+".join([Path(f).stem for f in args.file])
     else:
         dirname = os.path.dirname(args.file[0])
-    basename = "+".join([Path(f).stem for f in args.file])
+        basename = "+".join([Path(f).stem for f in args.file])
 
     json_file = os.path.join(dirname, basename) + ".history.json"
     uri2path = {f.uri:f.display_name for f in ready_files}
@@ -67,6 +72,8 @@ def upload_to_gemini(path, mime_type=None):
 
     if path.endswith('.md'):
         mime_type = "text/markdown"
+    elif path.endswith('.srt') or path.endswith('.vtt') or path.endswith('.txt'):
+        mime_type = "text/plain"
     else:
         mime_type = None
     print(f"Uploading file '{path}' as {mime_type}...")
@@ -103,10 +110,13 @@ def wait_for_files_active(files):
 if __name__ == '__main__':
     load_dotenv()
     GEMINI_API_KEY=os.getenv('GEMINI_API_KEY')
+    GROQ_API_KEY=os.getenv('GROQ_API_KEY')
     genai.configure(api_key=GEMINI_API_KEY)
 
     parser = argparse.ArgumentParser(description='Gemini Summarize')
     parser.add_argument('--file', nargs="*", help='Files to upload.')
+    parser.add_argument('--url', nargs="*", help='url to download.')
+    parser.add_argument("--cookies", help="cookies file path")
     parser.add_argument('--prompt', help='prompt', default="请根据视频字幕总结主持人的主要观点")
     parser.add_argument('--model', help='model', default="models/gemini-1.5-flash")
     parser.add_argument('--question', help='ask question after summarize', action='store_true', default=False)
@@ -124,7 +134,11 @@ if __name__ == '__main__':
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
         }
     )
-    files = [upload_to_gemini(f) for f in args.file]
+
+    if args.file:
+        files = [upload_to_gemini(f) for f in args.file]
+    else:
+        files = [upload_to_gemini(download_subtitle_or_audio(url, args.cookies, GROQ_API_KEY)) for url in args.url]
     ready_files = wait_for_files_active(files)
 
     chat = model.start_chat(history=[
