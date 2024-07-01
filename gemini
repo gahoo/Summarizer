@@ -7,8 +7,9 @@ source $SCRIPT_PATH/env/bin/activate
 
 extra_args=${extra_args:-}
 model=${lang:-models/gemini-1.5-pro}
+[ -z "$prompt" ] && prompt=$(cat $SCRIPT_PATH/prompts.txt|fzf -m)
 
 export http_proxy=http://127.0.0.1:8118 
 export https_proxy=http://127.0.0.1:8118 
 
-python3 $SCRIPT_PATH/Summarize.py --model $model --question --save_history --file $@ 
+python3 $SCRIPT_PATH/Summarize.py --model $model --prompt "$prompt" --question --save_history "$@"
