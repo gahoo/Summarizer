@@ -26,6 +26,9 @@ def save_history_before_exit(chat, ready_files):
 
     def format_markdown(history):
         md = []
+        if args.url:
+            md.append("\n\n".join(args.url))
+            md.append("-" * 10)
         for entry in history:
             if entry.role == 'user':
                 md.append("-" * 10)
@@ -58,7 +61,7 @@ def save_history_before_exit(chat, ready_files):
     with open(json_file, 'w') as file:
         json.dump(json_history, file)
 
-    md_file = os.path.join(dirname, basename) + ".md"
+    md_file = os.path.join(dirname, basename) + ".gemini.md"
     print(f"History written to {md_file}")
     md_history = format_markdown(chat.history)
     with open(md_file, 'w') as file:
@@ -137,16 +140,19 @@ if __name__ == '__main__':
 
     if args.file:
         files = [upload_to_gemini(f) for f in args.file]
-    else:
+    elif args.url:
         files = [upload_to_gemini(download_subtitle_or_audio(url, args.cookies, GROQ_API_KEY)) for url in args.url]
-    ready_files = wait_for_files_active(files)
 
-    chat = model.start_chat(history=[
-        {"role": "user", "parts": ready_files},
-#        {"role": "user", "parts": args.prompt},
-    ])
+    if args.file or args.url:
+        ready_files = wait_for_files_active(files)
+        chat = model.start_chat(history=[
+            {"role": "user", "parts": ready_files},
+    #        {"role": "user", "parts": args.prompt},
+        ])
+    else:
+        chat = model.start_chat(history=[])
 
-    if args.save_history:
+    if args.save_history and (args.file or args.url):
         atexit.register(save_history_before_exit, chat, ready_files)
 
     # Make the LLM request.
