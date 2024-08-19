@@ -122,6 +122,7 @@ if __name__ == '__main__':
     parser.add_argument("--cookies", help="cookies file path")
     parser.add_argument('--prompt', help='prompt', default="请根据视频字幕总结主持人的主要观点")
     parser.add_argument('--model', help='model', default="models/gemini-1.5-flash")
+    parser.add_argument('--srt_to_txt', help='convert srt to txt', action='store_true', default=False)
     parser.add_argument('--question', help='ask question after summarize', action='store_true', default=False)
     parser.add_argument('--save_history', help='ask question after summarize', action='store_true', default=False)
     args = parser.parse_args()
@@ -141,7 +142,7 @@ if __name__ == '__main__':
     if args.file:
         files = [upload_to_gemini(f) for f in args.file]
     elif args.url:
-        files = [upload_to_gemini(download_subtitle_or_audio(url, args.cookies, GROQ_API_KEY)) for url in args.url]
+        files = [upload_to_gemini(download_subtitle_or_audio(url, args.cookies, GROQ_API_KEY, convert_to_txt=args.srt_to_txt)) for url in args.url]
 
     if args.file or args.url:
         ready_files = wait_for_files_active(files)

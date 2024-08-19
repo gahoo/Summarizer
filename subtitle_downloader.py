@@ -53,7 +53,7 @@ def srt_to_txt(srt_file_path, txt_file_path):
     print(f"转换完成。文本已保存到 {txt_file_path}")
 
 
-def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, language=None):
+def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, language=None, convert_to_txt=False):
     ydl_opts = {
         'skip_download': True,
         'writesubtitles': True,
@@ -89,8 +89,11 @@ def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, langua
                 ydl.download([url])
             language = get_best_subtitle_language(info['subtitles'])
             print(f"已下载字幕: {safe_title}.{language}.srt")
-            srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
-            return f'{safe_title}.{language}.txt'
+            if convert_to_txt:
+                srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
+                return f'{safe_title}.{language}.txt'
+            else:
+                return f'{safe_title}.{language}.srt'
         
         elif info.get('automatic_captions'):
             # 下载自动生成的字幕
@@ -108,8 +111,11 @@ def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, langua
                 ydl.download([url])
             language = get_best_subtitle_language(info['automatic_captions'])
             print(f"已下载自动生成的字幕: {safe_title}.{language}.srt")
-            srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
-            return f'{safe_title}.{language}.txt'
+            if convert_to_txt:
+                srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
+                return f'{safe_title}.{language}.txt'
+            else:
+                return f'{safe_title}.{language}.srt'
         
         else:
             # 如果没有字幕，下载音频并使用Whisper API
