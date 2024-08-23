@@ -6,9 +6,10 @@ import atexit
 import json
 import time
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf
 from dotenv import load_dotenv
 from pathlib import Path
-from subtitle_downloader import download_subtitle_or_audio
+from subtitle_downloader import download_captions
 
 
 def save_history_before_exit(chat, ready_files):
@@ -54,14 +55,15 @@ def save_history_before_exit(chat, ready_files):
         dirname = os.path.dirname(args.file[0])
         basename = "+".join([Path(f).stem for f in args.file])
 
-    json_file = os.path.join(dirname, basename) + ".history.json"
+    prefix, ext = os.path.splitext(os.path.join(dirname, basename))
+    json_file = prefix + ".history.json"
     uri2path = {f.uri:f.display_name for f in ready_files}
     json_history = history2json(chat.history)
     print(f"History written to {json_file}")
     with open(json_file, 'w') as file:
         json.dump(json_history, file)
 
-    md_file = os.path.join(dirname, basename) + ".gemini.md"
+    md_file = prefix + ".gemini.md"
     print(f"History written to {md_file}")
     md_history = format_markdown(chat.history)
     with open(md_file, 'w') as file:
@@ -77,6 +79,8 @@ def upload_to_gemini(path, mime_type=None):
         mime_type = "text/markdown"
     elif path.endswith('.srt') or path.endswith('.vtt') or path.endswith('.txt'):
         mime_type = "text/plain"
+    elif path.endswith('.pdf'):
+        mime_type = "application/pdf"
     else:
         mime_type = None
     print(f"Uploading file '{path}' as {mime_type}...")
@@ -109,11 +113,67 @@ def wait_for_files_active(files):
     print("...all files ready\n")
     return ready_files
 
+def url2file(url):
+    if 'youtube.com' in url:
+        return download_captions(url, args.cookies, convert_to_txt=args.srt_to_txt, transcribe=args.transcribe)
+    elif '.pdf' in url:
+        return download_pdf(url, args.pdf_to_markdown)
+    else:
+        return url2markdown(url)
+        
+def url2markdown(url):
+    if args.scraper == 'firecrawl':
+        return firecrawl(url, onlyMainContent=args.onlyMainContent, onlyIncludeTags=args.onlyIncludeTags, removeTags=args.removeTags)
+    elif args.scraper == 'jina':
+        return jina(url)
+    elif args.scraper == 'magic_markdownify':
+        return magic_markdownify(url)
+    elif args.scraper == 'readability_markdownify':
+        return readability_markdownify(url)
+
+def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True):
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        # safety_settings = Adjust safety settings
+        # See https://ai.google.dev/gemini-api/docs/safety-settings
+        safety_settings={
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    })
+
+    ready_files = prepare_gemini_files(files, urls)
+    chat = prepare_gemini_chat(model, ready_files)
+
+    if save_history and ready_files:
+        atexit.register(save_history_before_exit, chat, ready_files)
+
+    return chat
+
+def prepare_gemini_files(files, urls):
+    uploaded_files = []
+    if files:
+        uploaded_files += [upload_to_gemini(f) for f in files]
+    elif urls:
+        uploaded_files += [upload_to_gemini(url2file(url)) for url in urls]
+    
+    return wait_for_files_active(uploaded_files)
+    
+    
+def prepare_gemini_chat(model, ready_files):
+    if ready_files:
+        chat = model.start_chat(history=[
+            {"role": "user", "parts": ready_files},
+    #        {"role": "user", "parts": args.prompt},
+        ])
+    else:
+        chat = model.start_chat(history=[])
+    return chat
 
 if __name__ == '__main__':
     load_dotenv()
     GEMINI_API_KEY=os.getenv('GEMINI_API_KEY')
-    GROQ_API_KEY=os.getenv('GROQ_API_KEY')
     genai.configure(api_key=GEMINI_API_KEY)
 
     parser = argparse.ArgumentParser(description='Gemini Summarize')
@@ -125,36 +185,20 @@ if __name__ == '__main__':
     parser.add_argument('--srt_to_txt', help='convert srt to txt', action='store_true', default=False)
     parser.add_argument('--question', help='ask question after summarize', action='store_true', default=False)
     parser.add_argument('--save_history', help='ask question after summarize', action='store_true', default=False)
+    parser.add_argument('--scraper', help='URL scraper(jina, firecrawl, magic_markdownify, readability_markdownify)', default='jina')
+    parser.add_argument('--onlyMainContent', action='store_true', help='Filter content to main content only(firecrawl option)')
+    parser.add_argument('--onlyIncludeTags', action='append', help='Filter content to include only specified tags(firecrawl option)')
+    parser.add_argument('--removeTags', action='append', help='Filters content to remove specified tags(firecrawl option)')
+    parser.add_argument('--return_format', help='return format(jina scraper option)', default='markdown')
+    parser.add_argument('--targe_selector', type=str, help='css selector of the html component(jina scraper option)', default='')
+    parser.add_argument('--wait_for_selector', type=str, help='css selector of the html component wait to appear(jina scraper option)', default='')
+    parser.add_argument('--timeout', type=int, help='timout (jina scraper option)', default=30)
+    parser.add_argument('--pdf_to_markdown', help='convert pdf to markdown', action='store_true', default=False)
+    parser.add_argument('--no_transcribe', help="don't transcribe audio files", dest='transcribe', action='store_false', default=True)
+
     args = parser.parse_args()
 
-    model = genai.GenerativeModel(
-        model_name=args.model,
-        # safety_settings = Adjust safety settings
-        # See https://ai.google.dev/gemini-api/docs/safety-settings
-        safety_settings={
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        }
-    )
-
-    if args.file:
-        files = [upload_to_gemini(f) for f in args.file]
-    elif args.url:
-        files = [upload_to_gemini(download_subtitle_or_audio(url, args.cookies, GROQ_API_KEY, convert_to_txt=args.srt_to_txt)) for url in args.url]
-
-    if args.file or args.url:
-        ready_files = wait_for_files_active(files)
-        chat = model.start_chat(history=[
-            {"role": "user", "parts": ready_files},
-    #        {"role": "user", "parts": args.prompt},
-        ])
-    else:
-        chat = model.start_chat(history=[])
-
-    if args.save_history and (args.file or args.url):
-        atexit.register(save_history_before_exit, chat, ready_files)
+    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history)
 
     # Make the LLM request.
     print("Making LLM inference request...")
