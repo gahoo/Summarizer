@@ -3,11 +3,30 @@ import os
 import argparse
 import pdb
 import re
+import requests
+import functools
 from dotenv import load_dotenv
 from groq import Groq
 
+load_dotenv()
+GROQ_API_KEY=os.getenv('GROQ_API_KEY')
+WHISPER_ASR_API_URL = os.getenv('WHISPER_ASR_API_URL')
+
+def undo_proxy(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        http_proxy = os.environ.pop('http_proxy', None)
+        https_proxy = os.environ.pop('https_proxy', None)
+
+        result = func(*args, **kwargs)
+
+        os.environ['http_proxy'] = http_proxy
+        os.environ['https_proxy'] = https_proxy
+        return result
+    return wrapper
+
 def get_best_subtitle_language(subtitles):
-    preferred_languages = ['en', 'zh', 'zh-Hans', 'zh-Hant', 'en-US', 'en-GB', 'es', 'fr', 'de', 'it', 'pt']  # 添加更多语言代码
+    preferred_languages = ['en', 'zh', 'zh-Hans', 'zh-Hant', 'zh-TW', 'en-US', 'en-GB']  # 添加更多语言代码
     
     # 首先检查是否有首选语言的字幕
     for lang in preferred_languages:
@@ -52,13 +71,14 @@ def srt_to_txt(srt_file_path, txt_file_path):
 
     print(f"转换完成。文本已保存到 {txt_file_path}")
 
-
-def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, language=None, convert_to_txt=False):
+def download_captions(url, cookies_file=None, language=None, convert_to_txt=False, transcribe=True):
     ydl_opts = {
         'skip_download': True,
-        'writesubtitles': True,
-        'writeautomaticsub': True,
-        'outtmpl': '%(title)s.%(ext)s',
+        'postprocessors': [{
+            'format': 'srt',
+            'key': 'FFmpegSubtitlesConvertor',
+            'when': 'before_dl'
+        }]
     }
     
     if cookies_file:
@@ -66,93 +86,87 @@ def download_subtitle_or_audio(url, cookies_file=None, groq_api_key=None, langua
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        title = info['title']
-        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-        
-#        if not language:
-#            language = get_best_subtitle_language(info.get('subtitles', {}), info.get('automatic_captions', {}))
-
-                # 检查是否有字幕
+        safe_title = "".join([c for c in info['title'] if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+        ydl.params['outtmpl']['default'] = f'{safe_title}.%(ext)s'
         if info.get('subtitles') and 'live_chat' not in info.get('subtitles'):
-            # 下载字幕
-            ydl_opts = {
-                'skip_download': True,
-                'writesubtitles': True,
-                'outtmpl': f'{safe_title}.%(ext)s',
-                'postprocessors': [{'format': 'srt',
-                     'key': 'FFmpegSubtitlesConvertor',
-                     'when': 'before_dl'}],
-            }
-            if cookies_file:
-                ydl_opts['cookiefile'] = cookies_file
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            language = get_best_subtitle_language(info['subtitles'])
-            print(f"已下载字幕: {safe_title}.{language}.srt")
-            if convert_to_txt:
-                srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
-                return f'{safe_title}.{language}.txt'
-            else:
-                return f'{safe_title}.{language}.srt'
-        
+            if not language:
+                language = get_best_subtitle_language(info['subtitles'])
+            caption_file = download_youtube_captions(url, ydl, safe_title, language, automatic_captions=False, convert_to_txt=convert_to_txt)
         elif info.get('automatic_captions'):
-            # 下载自动生成的字幕
-            ydl_opts = {
-                'skip_download': True,
-                'writeautomaticsub': True,
-                'postprocessors': [{'format': 'srt',
-                     'key': 'FFmpegSubtitlesConvertor',
-                     'when': 'before_dl'}],
-                'outtmpl': f'{safe_title}.%(ext)s',
-            }
-            if cookies_file:
-                ydl_opts['cookiefile'] = cookies_file
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            language = get_best_subtitle_language(info['automatic_captions'])
-            print(f"已下载自动生成的字幕: {safe_title}.{language}.srt")
-            if convert_to_txt:
-                srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
-                return f'{safe_title}.{language}.txt'
-            else:
-                return f'{safe_title}.{language}.srt'
-        
+            if not language:
+                language = get_best_subtitle_language(info['automatic_captions'])
+            caption_file = download_youtube_captions(url, ydl, safe_title, language, automatic_captions=True, convert_to_txt=convert_to_txt)
         else:
-            # 如果没有字幕，下载音频并使用Whisper API
-            ydl_opts = {
-                'format': '139',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'm4a',
-                    'preferredquality': '16',
-                }],
-                'outtmpl': f'{safe_title}.%(ext)s',
-            }
-            if cookies_file:
-                ydl_opts['cookiefile'] = cookies_file
+            audio_file = download_youtube_audio(url, ydl, safe_title)
+            if not transcribe:
+                return audio_file
+            elif info.get('duration') <= 7200 and is_file_size_within_limit(audio_file, 25 * 1024 * 1024):
+                caption_file = groq_transcribe(audio_file, language)
+            else:
+                caption_file = whisper_asr_transcribe(audio_file, language=language)
+    return caption_file
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-        
-            audio_file = f"{safe_title}.m4a"
-            if os.path.exists(audio_file) and groq_api_key:
-                client = Groq(api_key=groq_api_key)
-                with open(audio_file, "rb") as file:
-                    transcription = client.audio.transcriptions.create(
-                        file=(audio_file, file.read()),
-                        model="whisper-large-v3",
-                        response_format="verbose_json",
-                        language=language,
-                        temperature=0.0
-                    )
-                
-                txt_file = f"{safe_title}.txt"
-                text = "\n".join([segment['text'] for segment in transcription.segments])
-                with open(txt_file, "w", encoding="utf-8") as f:
-                    f.write(text)
-                
-                print(f"已生成{language}字幕: {txt_file}")
-            return txt_file
+def is_file_size_within_limit(filename, max_size):
+    return os.path.getsize(filename) < max_size
+
+def download_youtube_captions(url, ydl, safe_title, language, automatic_captions=False, convert_to_txt=False):
+    if automatic_captions:
+        ydl.params['writeautomaticsub'] = True
+    else:
+        ydl.params['writesubtitles'] = True
+
+    ydl.params['subtitleslangs'] = [language]
+    ydl.download([url])
+    print(f"已下载字幕: {safe_title}.{language}.srt")
+    if convert_to_txt:
+        srt_to_txt(f'{safe_title}.{language}.srt', f'{safe_title}.{language}.txt')
+        return f'{safe_title}.{language}.txt'
+    else:
+        return f'{safe_title}.{language}.srt'
+
+def download_youtube_audio(url, ydl, safe_title):
+    ydl.format_selector = ydl.build_format_selector('139')
+    ydl.params['skip_download'] = False
+    ydl.download([url])
+    audio_file = f"{safe_title}.m4a"
+    return audio_file
+
+def groq_transcribe(audio_file, language):
+    client = Groq(api_key=GROQ_API_KEY)
+    print(f"使用Groq进行语音识别: {audio_file}")
+    with open(audio_file, "rb") as file:
+        transcription = client.audio.transcriptions.create(
+            file=(audio_file, file.read()),
+            model="whisper-large-v3",
+            response_format="verbose_json",
+            language=language,
+            temperature=0.0
+        )
+    
+    safe_title = os.path.splitext(audio_file)[0]
+    txt_file = f"{safe_title}.txt"
+    text = "\n".join([segment['text'] for segment in transcription.segments])
+    with open(txt_file, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"已识别字幕: {safe_title}.txt")
+    return txt_file
+
+@undo_proxy
+def whisper_asr_transcribe(audio_file, **kwargs):
+    files = {'audio_file': (audio_file, open(audio_file, "rb"), 'audio/x-m4a')}
+    valid_params = ['encode', 'task', 'vad_filter', 'language', 'word_timestamps', 'output', 'initial_prompt']
+    params = {k: str(v).lower() for k, v in kwargs.items() if v is not None and k in valid_params}
+    headers = {'accept': 'application/json'}
+    print(f"使用Whisper ASR进行语音识别: {audio_file}")
+    response = requests.post(WHISPER_ASR_API_URL, files=files, params=params, headers=headers)
+    response.raise_for_status()
+    safe_title = os.path.splitext(audio_file)[0]
+    output_format = kwargs.get('output', 'txt')
+    out_file = f"{safe_title}.{output_format}"
+    with open(out_file, "w", encoding="utf-8") as f:
+        f.write(response.text)
+    print(f"已识别字幕: {safe_title}.{output_format}")
+    return out_file
 
 def main():
     parser = argparse.ArgumentParser(description="下载YouTube视频的字幕或音频")
@@ -161,9 +175,7 @@ def main():
     parser.add_argument("--language", help="指定字幕语言（例如：en, es, fr）")
     args = parser.parse_args()
 
-    load_dotenv()
-    GROQ_API_KEY=os.getenv('GROQ_API_KEY')
-    download_subtitle_or_audio(args.url, args.cookies, GROQ_API_KEY, args.language)
+    download_captions(args.url, args.cookies, args.language)
 
 if __name__ == "__main__":
     main()
