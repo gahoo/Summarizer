@@ -13,16 +13,17 @@ FIRECRAWL_API_KEY=osenv('FIRECRAWL_API_KEY')
 JINA_API_KEY=osenv('JINA_API_KEY', None)
 MARKER_API_URL = os.getenv('MARKER_API_URL')
 
-def save_markdown(filename, content):
+def write_flie(filename, content):
     with open(filename, 'w') as f:
         f.write(content)
+    print(f"File written to {filename}")
 
 def firecrawl(url, **kwargs):
     app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
     params = build_firecrawl_params(**kwargs)
     response = app.scrape_url(url, params)
     filename = response['metadata']['title'] + '.firecrawl.md'
-    save_markdown(filename, response['markdown'])
+    write_flie(filename, response['markdown'])
     return filename
 
 def build_firecrawl_params(**kwargs):
@@ -42,7 +43,7 @@ def jina(url, **kwargs):
     response = requests.post('https://r.jina.ai/', headers=headers, data=data)
     json = response.json()
     filename = json['data']['title'] + '.jina.md'
-    save_markdown(filename, json['data']['content'])
+    write_flie(filename, json['data']['content'])
     return filename
 
 def build_jina_params(**kwargs):
@@ -71,7 +72,7 @@ def magic_markdownify(url):
     content = markdownify(data['html']).strip()
     markdown = '# {title}\n\n{content}'.format(title=data['title'], content=content)
     filename = data['title'] + '.magic.md'
-    save_markdown(filename, markdown)
+    write_flie(filename, markdown)
     return filename
     
 def readability_markdownify(url):
@@ -80,7 +81,7 @@ def readability_markdownify(url):
     filename = doc.title() + '.readability.md'
     content = markdownify(doc.summary())
     markdown = '# {title}\n\n{content}'.format(title=doc.title(), content=content)
-    save_markdown(filename, markdown)
+    write_flie(filename, markdown)
     return filename
 
 def download_pdf(url, convert_to_markdown=False):
@@ -114,7 +115,7 @@ def pdf2markdown(pdf_file):
     filename = os.path.basename(pdf_file).replace('.pdf', '.md')
     json = response.json()
     markdown = json.get('markdown')
-    save_markdown(filename, markdown)
+    write_flie(filename, markdown)
     print('PDF converted: ', filename)
     return filename
     
