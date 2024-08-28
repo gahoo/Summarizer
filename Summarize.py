@@ -6,48 +6,60 @@ import atexit
 import json
 import time
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf
+from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, write_flie
 from dotenv import load_dotenv
 from pathlib import Path
 from subtitle_downloader import download_captions
 
 
-def save_history_before_exit(chat, ready_files):
-    def history2json(history):
-        return [format_entry(e) for e in history]
+def history2markdown(history, uri2path={}):
+    def format_part_markdown(part, prefix):
+        if 'file_data' in part:
+            if uri2path:
+                return os.path.basename(uri2path[part['file_data']['file_uri']])
+            else:
+                return part['file_data']['file_uri']
+        else:
+            if isinstance(part, str):
+                return prefix + part
+            else:    
+                return prefix + part['text']
+    
+    md = []
+    if args.url:
+        md.append("\n\n".join(args.url))
+        md.append("-" * 10)
+    for entry in history:
+        if entry['role'] == 'user':
+            md.append("-" * 10)
+            prefix = "> "
+        else:
+            prefix = ""
+        md.append("\n\n".join([format_part_markdown(part, prefix) for part in entry['parts']]))
+    return "\n\n".join(md)
 
+def history2json(history, uri2path={}):
     def format_entry(history_entry):
         return {"role": history_entry.role, "parts": [format_part(part) for part in history_entry.parts]}
 
     def format_part(part):
         if 'file_data' in part:
-            return {"file_data": {"mime_type": part.file_data.mime_type, "file_uri": part.file_data.file_uri, "file_path": uri2path[part.file_data.file_uri]}}
+            if uri2path:
+                return {"file_data": {"mime_type": part.file_data.mime_type, "file_uri": part.file_data.file_uri, "file_path": uri2path[part.file_data.file_uri]}}
+            else:
+                return {"file_data": {"mime_type": part.file_data.mime_type, "file_uri": part.file_data.file_uri}}
         else:
             return part.text
+        
+    return [format_entry(e) for e in history]
 
-    def format_markdown(history):
-        md = []
-        if args.url:
-            md.append("\n\n".join(args.url))
-            md.append("-" * 10)
-        for entry in history:
-            if entry.role == 'user':
-                md.append("-" * 10)
-                prefix = "> "
-            else:
-                prefix = ""
-            md.append("\n\n".join([format_part_markdown(part, prefix) for part in entry.parts]))
-        return "\n\n".join(md)
-    
-    def format_part_markdown(part, prefix):
-        if 'file_data' in part:
-            return os.path.basename(uri2path[part.file_data.file_uri])
-        else:
-            return prefix + part.text
-
-    if args.file is None and args.url:
+def save_history_before_exit(chat, uri2path, history_file):
+    if history_file:
+        dirname = os.path.dirname(history_file.name)
+        basename = history_file.name.replace('.history', '')
+    elif args.file is None and args.url:
         dirname = "./"
-        basename = "+".join([os.path.basename(f.display_name) for f in ready_files])
+        basename = "+".join([os.path.basename(v) for v in uri2path.values()])
     elif len(args.file) > 1:
         dirname = os.path.commonpath(args.file)
         basename = "+".join([Path(f).stem for f in args.file])
@@ -55,19 +67,13 @@ def save_history_before_exit(chat, ready_files):
         dirname = os.path.dirname(args.file[0])
         basename = "+".join([Path(f).stem for f in args.file])
 
-    prefix, ext = os.path.splitext(os.path.join(dirname, basename))
-    json_file = prefix + ".history.json"
-    uri2path = {f.uri:f.display_name for f in ready_files}
-    json_history = history2json(chat.history)
-    print(f"History written to {json_file}")
-    with open(json_file, 'w') as file:
-        json.dump(json_history, file)
+    prefix = os.path.splitext(os.path.join(dirname, basename))[0]
 
-    md_file = prefix + ".gemini.md"
-    print(f"History written to {md_file}")
-    md_history = format_markdown(chat.history)
-    with open(md_file, 'w') as file:
-        file.write(md_history)
+    history_json = history2json(chat.history, uri2path)
+    write_flie(prefix + ".history.json", json.dumps(history_json))
+
+    history_markdown = history2markdown(history_json, uri2path)
+    write_flie(prefix + ".gemini.md", history_markdown)
 
 def upload_to_gemini(path, mime_type=None):
     """Uploads the given file to Gemini.
@@ -131,7 +137,7 @@ def url2markdown(url):
     elif args.scraper == 'readability_markdownify':
         return readability_markdownify(url)
 
-def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True):
+def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, history_file=None):
     model = genai.GenerativeModel(
         model_name=model_name,
         # safety_settings = Adjust safety settings
@@ -143,13 +149,45 @@ def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True):
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
     })
 
+    history, uri2path = prepare_gemini_history(history_file)
     ready_files = prepare_gemini_files(files, urls)
-    chat = prepare_gemini_chat(model, ready_files)
+    uri2path.update({f.uri:f.display_name for f in ready_files})
+    chat = prepare_gemini_chat(model, ready_files, history)
 
-    if save_history and ready_files:
-        atexit.register(save_history_before_exit, chat, ready_files)
+    if save_history and (uri2path or history_file):
+        atexit.register(save_history_before_exit, chat, uri2path, history_file)
 
     return chat
+
+def prepare_gemini_history(history_file):
+    def remove_history_file_path(history):
+        uri2path = {}
+        for entry in history:
+            uri2path.update(remove_entry_file_path(entry))
+        return uri2path
+    
+    def remove_entry_file_path(entry):
+        uri2path = {}
+        for part in entry['parts']:
+            uri2path.update(remove_part_file_path(part))
+        return uri2path
+    
+    def remove_part_file_path(part):
+        if 'file_data' in part:
+            uri2path = {part['file_data']['file_uri']: part['file_data'].pop('file_path')}
+        else:
+            uri2path = {}
+
+        return uri2path
+
+    if history_file:
+        history = json.loads(history_file.read())
+        history_file.close()
+        uri2path = remove_history_file_path(history)
+        print(history2markdown(history, uri2path))
+        return history, uri2path
+    else:
+        return [], {}
 
 def prepare_gemini_files(files, urls):
     uploaded_files = []
@@ -161,8 +199,10 @@ def prepare_gemini_files(files, urls):
     return wait_for_files_active(uploaded_files)
     
     
-def prepare_gemini_chat(model, ready_files):
-    if ready_files:
+def prepare_gemini_chat(model, ready_files, history):
+    if history:
+        chat = model.start_chat(history=history)
+    elif ready_files:
         chat = model.start_chat(history=[
             {"role": "user", "parts": ready_files},
     #        {"role": "user", "parts": args.prompt},
@@ -185,6 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--srt_to_txt', help='convert srt to txt', action='store_true', default=False)
     parser.add_argument('--question', help='ask question after summarize', action='store_true', default=False)
     parser.add_argument('--save_history', help='ask question after summarize', action='store_true', default=False)
+    parser.add_argument('--load_history', type=argparse.FileType('r'), dest='history_file', help='load history from file')
     parser.add_argument('--scraper', help='URL scraper(jina, firecrawl, magic_markdownify, readability_markdownify)', default='jina')
     parser.add_argument('--onlyMainContent', action='store_true', help='Filter content to main content only(firecrawl option)')
     parser.add_argument('--onlyIncludeTags', action='append', help='Filter content to include only specified tags(firecrawl option)')
@@ -198,7 +239,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history)
+    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history, args.history_file)
 
     # Make the LLM request.
     print("Making LLM inference request...")
