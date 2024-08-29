@@ -39,7 +39,7 @@ def build_firecrawl_params(**kwargs):
     else:
         return {}
     
-def jina(url, prefix=get_url_basename(url), **kwargs):
+def jina(url, **kwargs):
     headers = build_jina_params(**kwargs)
     data = {'url': url}
     print(headers, data)
