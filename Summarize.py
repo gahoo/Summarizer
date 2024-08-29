@@ -5,8 +5,9 @@ import pdb
 import atexit
 import json
 import time
+import magic
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, write_flie
+from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, download_file, write_flie, extract_markdown_images
 from dotenv import load_dotenv
 from pathlib import Path
 from subtitle_downloader import download_captions
@@ -81,14 +82,8 @@ def upload_to_gemini(path, mime_type=None):
     See https://ai.google.dev/gemini-api/docs/prompting_with_media
     """
 
-    if path.endswith('.md'):
-        mime_type = "text/markdown"
-    elif path.endswith('.srt') or path.endswith('.vtt') or path.endswith('.txt'):
-        mime_type = "text/plain"
-    elif path.endswith('.pdf'):
-        mime_type = "application/pdf"
-    else:
-        mime_type = None
+    mime = magic.Magic(mime=True)
+    mime_type = mime.from_file(path)
     print(f"Uploading file '{path}' as {mime_type}...")
     file = genai.upload_file(path, mime_type=mime_type, display_name=path)
     print(f"Uploaded file '{file.display_name}' as: {file.uri}")
@@ -137,7 +132,7 @@ def url2markdown(url):
     elif args.scraper == 'readability_markdownify':
         return readability_markdownify(url)
 
-def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, history_file=None):
+def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, history_file=None, extract_images=False):
     model = genai.GenerativeModel(
         model_name=model_name,
         # safety_settings = Adjust safety settings
@@ -150,7 +145,7 @@ def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, h
     })
 
     history, uri2path = prepare_gemini_history(history_file)
-    ready_files = prepare_gemini_files(files, urls)
+    ready_files = prepare_gemini_files(files, urls, extract_images)
     uri2path.update({f.uri:f.display_name for f in ready_files})
     chat = prepare_gemini_chat(model, ready_files, history)
 
@@ -189,26 +184,25 @@ def prepare_gemini_history(history_file):
     else:
         return [], {}
 
-def prepare_gemini_files(files, urls):
+def prepare_gemini_files(files, urls, extract_images=True):
     uploaded_files = []
     if files:
         uploaded_files += [upload_to_gemini(f) for f in files]
     elif urls:
         uploaded_files += [upload_to_gemini(url2file(url)) for url in urls]
-    
+
+    if extract_images:
+        image_urls = sum([extract_markdown_images(f.display_name) for f in uploaded_files if f.display_name.endswith('.md')], [])
+        image_files = [download_file(url) for url in image_urls]
+        uploaded_files += [upload_to_gemini(f) for f in image_files]
+
     return wait_for_files_active(uploaded_files)
     
     
 def prepare_gemini_chat(model, ready_files, history):
-    if history:
-        chat = model.start_chat(history=history)
-    elif ready_files:
-        chat = model.start_chat(history=[
-            {"role": "user", "parts": ready_files},
-    #        {"role": "user", "parts": args.prompt},
-        ])
-    else:
-        chat = model.start_chat(history=[])
+    if ready_files:
+        history.append({"role": "user", "parts": ready_files})
+    chat = model.start_chat(history=history)
     return chat
 
 if __name__ == '__main__':
@@ -236,10 +230,11 @@ if __name__ == '__main__':
     parser.add_argument('--timeout', type=int, help='timout (jina scraper option)', default=30)
     parser.add_argument('--pdf_to_markdown', help='convert pdf to markdown', action='store_true', default=False)
     parser.add_argument('--no_transcribe', help="don't transcribe audio files", dest='transcribe', action='store_false', default=True)
+    parser.add_argument('--extract_images', help='extract images', action='store_true', default=False)
 
     args = parser.parse_args()
 
-    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history, args.history_file)
+    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history, args.history_file, args.extract_images)
 
     # Make the LLM request.
     print("Making LLM inference request...")
@@ -250,5 +245,7 @@ if __name__ == '__main__':
         while True:
             print("-" * 10 + "\n")
             msg = input(">请输入其他问题：")
+            if msg == "":
+                continue
             response = chat.send_message(msg)
             print("\n" + response.text)
