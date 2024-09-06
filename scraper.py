@@ -3,15 +3,14 @@ from dotenv import load_dotenv
 from magic_html import GeneralExtractor
 from readability import Document
 from markdownify import markdownify
-from os import getenv as osenv
 import requests
 import os
 import re
 import pdb
 
 load_dotenv()
-FIRECRAWL_API_KEY=osenv('FIRECRAWL_API_KEY')
-JINA_API_KEY=osenv('JINA_API_KEY', None)
+FIRECRAWL_API_KEY=os.getenv('FIRECRAWL_API_KEY')
+JINA_API_KEY=os.getenv('JINA_API_KEY', None)
 MARKER_API_URL = os.getenv('MARKER_API_URL')
 
 def get_url_basename(url):
@@ -31,7 +30,8 @@ def firecrawl(url, **kwargs):
     return filename
 
 def build_firecrawl_params(**kwargs):
-    kwargs = {k:v for k, v in kwargs.items() if v}
+    valid_params = ['onlyMainContent', 'onlyIncludeTags', 'removeTags']
+    kwargs = {k:v for k, v in kwargs.items() if v and k in valid_params}
     if kwargs:
         params = {'pageOptions': {}}
         params['pageOptions'] = kwargs
@@ -61,7 +61,8 @@ def build_jina_params(**kwargs):
         'X-Wait-For-Selector': '#content'
     }
     """
-    kwargs = {'X-' + k.capitalize().replace('_', '-'):v for k, v in kwargs.items() if v}
+    valid_params = ['return_format', 'targe_selector', 'wait_for_selector', 'timeout']
+    kwargs = {'X-' + k.capitalize().replace('_', '-'):str(v) for k, v in kwargs.items() if v and k in valid_params}
     headers = {'Accept': 'application/json'}
     if JINA_API_KEY:
         headers['Authorization'] = 'Bearer ' + JINA_API_KEY
