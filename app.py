@@ -1,91 +1,129 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-import google.generativeai as genai
-from Summarize import prepare_gemini_summarize, history2json
-import os
 import atexit
-import json
+from typing import Dict
+import os
+import pdb
+from werkzeug.utils import secure_filename
+from Summarize2 import GeminiSummarizer, genai, query_history
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///conversations.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# Load environment variables
-from dotenv import load_dotenv
-load_dotenv()
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-genai.configure(api_key=GEMINI_API_KEY)
 
-# Define database model
-class Conversation(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    conversation_id = db.Column(db.String(50), unique=True, nullable=False)
-    history = db.Column(db.Text, nullable=False)
+# In-memory storage for active conversations
+active_conversations: Dict[str, GeminiSummarizer] = {}
 
-# Create tables
-with app.app_context():
-    db.create_all()
+# Load the API key
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-# Global dictionary to store active conversations
-active_conversations = {}
+def save_uploaded_file(file):
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(file_path)
+    return file_path
 
-@app.route('/start_conversation', methods=['POST'])
-def start_conversation():
-    data = request.json
-    model_name = data.get('model', 'models/gemini-1.5-flash')
-    files = data.get('files', [])
-    urls = data.get('urls', [])
+@app.route('/conversations', methods=['POST'])
+def create_conversation():
+    if request.files:
+        data = {k:v for k,v in request.form.items()}
+        data.update({k:v == 'true' for k,v in data.items() if v.lower() in ['true', 'false']})
+        data['files'] = [save_uploaded_file(f) for f in request.files.getlist('files')]
+    else:
+        data = request.json
+    
+    summarizer = GeminiSummarizer(**data)
+    active_conversations[summarizer.id] = summarizer
+    
+    return jsonify({"conversation_id": summarizer.id}), 201
 
-    chat = prepare_gemini_summarize(model_name, files, urls)
-    conversation_id = str(len(active_conversations) + 1)
-    active_conversations[conversation_id] = chat
-
-    return jsonify({'conversation_id': conversation_id, 'message': 'Conversation started'})
-
-@app.route('/send_message', methods=['POST'])
-def send_message():
-    data = request.json
-    conversation_id = data.get('conversation_id')
-    message = data.get('message')
-
-    if conversation_id not in active_conversations:
-        return jsonify({'error': 'Conversation not found'}), 404
-
-    chat = active_conversations[conversation_id]
-    response = chat.send_message(message)
-
-    return jsonify({'response': response.text})
-
-@app.route('/get_history', methods=['GET'])
-def get_history():
-    conversation_id = request.args.get('conversation_id')
-
-    if conversation_id not in active_conversations:
-        return jsonify({'error': 'Conversation not found'}), 404
-
-    chat = active_conversations[conversation_id]
-    history = history2json(chat.history)
-
-    return jsonify({'history': history})
-
-@app.route('/list_conversations', methods=['GET'])
+@app.route('/conversations', methods=['GET'])
 def list_conversations():
-    conversations = Conversation.query.all()
-    return jsonify({'conversations': [{'id': c.conversation_id} for c in conversations]})
+    pdb.set_trace()
+    offset = int(request.args.get('offset', 0))
+    limit = int(request.args.get('limit', 10))
+    query_db = request.args.get('db') == 'true'
+    activated = [v.dict for v in active_conversations.values()]
+    activated_ids = [e['id'] for e in activated]
+    if query_db:
+        db = [e.dict for e in query_history(offset, limit)]
+        db = list(filter(lambda e: e['id'] not in activated_ids, db))
+    else:
+        db = []
+    conversations = activated + db
+    return jsonify(conversations[offset:offset+limit]), 200
 
-def save_conversations():
-    for conversation_id, chat in active_conversations.items():
-        history = json.dumps(history2json(chat.history))
-        conversation = Conversation.query.filter_by(conversation_id=conversation_id).first()
-        if conversation:
-            conversation.history = history
-        else:
-            new_conversation = Conversation(conversation_id=conversation_id, history=history)
-            db.session.add(new_conversation)
-    db.session.commit()
+@app.route('/conversations/<conversation_id>', methods=['PUT'])
+def save_conversation(conversation_id):
+    summarizer = active_conversations.get(conversation_id)
+    if summarizer:
+        summarizer.save()
+        return jsonify({"message": f"Conversation {conversation_id} saved successfully"}), 200
+    else:
+        return jsonify({"error": "Conversation not found"}), 404
 
-atexit.register(save_conversations)
+def get_summarizer(conversation_id, cache=False):
+    summarizer = active_conversations.get(conversation_id, GeminiSummarizer(id=conversation_id))
+    if summarizer.history:
+        if cache and conversation_id not in active_conversations:
+            active_conversations[conversation_id] = summarizer
+        return summarizer
+    else:
+        return None
+    
+@app.route('/conversations/<conversation_id>', methods=['GET'])
+def get_conversation(conversation_id):
+    summarizer = get_summarizer(conversation_id)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    return summarizer.dict, 200
+
+@app.route('/conversations/<conversation_id>', methods=['DELETE'])
+def delete_conversation(conversation_id):
+    summarizer = active_conversations.pop(conversation_id, GeminiSummarizer(id=conversation_id))
+
+    if summarizer.history:
+        summarizer.delete()
+        return '', 204
+    else:
+        return jsonify({"error": "Conversation not found"}), 404
+
+@app.route('/conversations/<conversation_id>/messages', methods=['POST'])
+def send_message(conversation_id):
+    summarizer = get_summarizer(conversation_id, cache=True)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    message = request.json.get('message')
+    if not message:
+        return jsonify({"error": "Message is required"}), 400
+    else:
+        print(message)
+    
+    response = summarizer.send(message)
+    return jsonify({"response": response})
+
+@app.route('/conversations/<conversation_id>/json', methods=['GET'])
+def get_conversation_json(conversation_id):
+    summarizer = get_summarizer(conversation_id)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    return jsonify(summarizer.json)
+
+@app.route('/conversations/<conversation_id>/markdown', methods=['GET'])
+def get_conversation_markdown(conversation_id):
+    summarizer = get_summarizer(conversation_id)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    return summarizer.markdown, 200, {'Content-Type': 'text/markdown'}
+
+def save_active_conversations():
+    for summarizer in active_conversations.values():
+        summarizer.save()
+
+atexit.register(save_active_conversations)
 
 if __name__ == '__main__':
     app.run(debug=True)
