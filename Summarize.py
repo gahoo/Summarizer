@@ -13,7 +13,7 @@ from pathlib import Path
 from subtitle_downloader import download_captions
 
 
-def history2markdown(history, uri2path={}):
+def history2markdown(history, uri2path={}, **kwargs):
     def format_part_markdown(part, prefix):
         if 'file_data' in part:
             if uri2path:
@@ -27,8 +27,8 @@ def history2markdown(history, uri2path={}):
                 return prefix + part['text']
     
     md = []
-    if args.url:
-        md.append("\n\n".join(args.url))
+    if kwargs.get('urls'):
+        md.append("\n\n".join(kwargs.get('urls')))
         md.append("-" * 10)
     for entry in history:
         if entry['role'] == 'user':
@@ -54,26 +54,26 @@ def history2json(history, uri2path={}):
         
     return [format_entry(e) for e in history]
 
-def save_history_before_exit(chat, uri2path, history_file):
+def save_history_before_exit(chat, uri2path, history_file, files, urls, **kwargs):
     if history_file:
         dirname = os.path.dirname(history_file.name)
         basename = history_file.name.replace('.history', '')
-    elif args.file is None and args.url:
+    elif (files is None or len(files) == 0) and urls:
         dirname = "./"
         basename = "+".join([os.path.basename(v) for v in uri2path.values()])
-    elif len(args.file) > 1:
-        dirname = os.path.commonpath(args.file)
-        basename = "+".join([Path(f).stem for f in args.file])
+    elif len(files) == 1:
+        dirname = os.path.dirname(files[0])
+        basename = "+".join([Path(f).stem for f in files])
     else:
-        dirname = os.path.dirname(args.file[0])
-        basename = "+".join([Path(f).stem for f in args.file])
+        dirname = os.path.commonpath(files)
+        basename = "+".join([Path(f).stem for f in files])
 
     prefix = os.path.splitext(os.path.join(dirname, basename))[0]
 
     history_json = history2json(chat.history, uri2path)
     write_flie(prefix + ".history.json", json.dumps(history_json))
 
-    history_markdown = history2markdown(history_json, uri2path)
+    history_markdown = history2markdown(history_json, uri2path, **kwargs)
     write_flie(prefix + ".gemini.md", history_markdown)
 
 def upload_to_gemini(path, mime_type=None):
@@ -114,27 +114,27 @@ def wait_for_files_active(files):
     print("...all files ready\n")
     return ready_files
 
-def url2file(url):
+def url2file(url, **kwargs):
     if 'youtube.com' in url:
-        return download_captions(url, args.cookies, convert_to_txt=args.srt_to_txt, transcribe=args.transcribe)
+        return download_captions(url, kwargs.get('cookies'), convert_to_txt=kwargs.get('srt_to_txt'), transcribe=kwargs.get('transcribe'))
     elif '.pdf' in url:
-        return download_pdf(url, args.pdf_to_markdown)
+        return download_pdf(url, kwargs.get('pdf_to_markdown'))
     else:
-        return url2markdown(url)
+        return url2markdown(url, **kwargs)
         
-def url2markdown(url):
-    if args.scraper == 'firecrawl':
-        return firecrawl(url, onlyMainContent=args.onlyMainContent, onlyIncludeTags=args.onlyIncludeTags, removeTags=args.removeTags)
-    elif args.scraper == 'jina':
+def url2markdown(url, scraper='jina', **kwargs):
+    if scraper == 'firecrawl':
+        return firecrawl(url, **kwargs)
+    elif scraper == 'jina':
         return jina(url)
-    elif args.scraper == 'magic_markdownify':
+    elif scraper == 'magic_markdownify':
         return magic_markdownify(url)
-    elif args.scraper == 'readability_markdownify':
+    elif scraper == 'readability_markdownify':
         return readability_markdownify(url)
 
-def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, history_file=None, extract_images=False):
-    model = genai.GenerativeModel(
-        model_name=model_name,
+def prepare_gemini_summarize(model, files=[], urls=[], save_history=True, history_file=None, **kwargs):
+    gemini_model = genai.GenerativeModel(
+        model_name=model,
         # safety_settings = Adjust safety settings
         # See https://ai.google.dev/gemini-api/docs/safety-settings
         safety_settings={
@@ -144,17 +144,17 @@ def prepare_gemini_summarize(model_name, files=[], urls=[], save_history=True, h
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
     })
 
-    history, uri2path = prepare_gemini_history(history_file)
-    ready_files = prepare_gemini_files(files, urls, extract_images)
+    history, uri2path = prepare_gemini_history(history_file, **kwargs)
+    ready_files = prepare_gemini_files(files, urls, **kwargs)
     uri2path.update({f.uri:f.display_name for f in ready_files})
-    chat = prepare_gemini_chat(model, ready_files, history)
+    chat = prepare_gemini_chat(gemini_model, ready_files, history)
 
     if save_history and (uri2path or history_file):
-        atexit.register(save_history_before_exit, chat, uri2path, history_file)
+        atexit.register(save_history_before_exit, chat, uri2path, history_file, files, urls)
 
     return chat
 
-def prepare_gemini_history(history_file):
+def prepare_gemini_history(history_file=None, history=None, **kwargs):
     def remove_history_file_path(history):
         uri2path = {}
         for entry in history:
@@ -168,7 +168,7 @@ def prepare_gemini_history(history_file):
         return uri2path
     
     def remove_part_file_path(part):
-        if 'file_data' in part:
+        if 'file_data' in part and 'file_path' in part['file_data']:
             uri2path = {part['file_data']['file_uri']: part['file_data'].pop('file_path')}
         else:
             uri2path = {}
@@ -178,18 +178,20 @@ def prepare_gemini_history(history_file):
     if history_file:
         history = json.loads(history_file.read())
         history_file.close()
+
+    if history:
         uri2path = remove_history_file_path(history)
         print(history2markdown(history, uri2path))
         return history, uri2path
     else:
         return [], {}
 
-def prepare_gemini_files(files, urls, extract_images=True):
+def prepare_gemini_files(files, urls, extract_images=True, **kwargs):
     uploaded_files = []
     if files:
         uploaded_files += [upload_to_gemini(f) for f in files]
     elif urls:
-        uploaded_files += [upload_to_gemini(url2file(url)) for url in urls]
+        uploaded_files += [upload_to_gemini(url2file(url, **kwargs)) for url in urls]
 
     if extract_images:
         image_urls = sum([extract_markdown_images(f.display_name) for f in uploaded_files if f.display_name.endswith('.md')], [])
@@ -211,8 +213,8 @@ if __name__ == '__main__':
     genai.configure(api_key=GEMINI_API_KEY)
 
     parser = argparse.ArgumentParser(description='Gemini Summarize')
-    parser.add_argument('--file', nargs="*", help='Files to upload.')
-    parser.add_argument('--url', nargs="*", help='url to download.')
+    parser.add_argument('--files', nargs="*", help='Files to upload.')
+    parser.add_argument('--urls', nargs="*", help='url to download.')
     parser.add_argument("--cookies", help="cookies file path")
     parser.add_argument('--prompt', help='prompt', default="请根据视频字幕总结主持人的主要观点")
     parser.add_argument('--model', help='model', default="models/gemini-1.5-flash")
@@ -234,7 +236,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    chat = prepare_gemini_summarize(args.model, args.file, args.url, args.save_history, args.history_file, args.extract_images)
+    chat = prepare_gemini_summarize(**vars(args))
 
     # Make the LLM request.
     print("Making LLM inference request...")
