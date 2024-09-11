@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Summarizer</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/2.0.3/marked.min.js"></script>
+    <style>
+        .chat-container {
+            height: calc(100vh - 220px);
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <div id="chat-container" class="chat-container bg-white rounded-lg shadow p-4 mb-4"></div>
+        <div class="mb-4">
+            <button id="new-conversation" class="bg-green-500 text-white rounded p-2 text-sm fa-solid fa-plus"></button>
+            <button id="view-conversations" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-eye"></button>
+            <button id="save-conversation" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-floppy-disk"></button>
+            <button id="delete-conversation" class="bg-red-500 text-white rounded p-2 text-sm fa-solid fa-trash-can"></button>
+            <button id="share-conversation" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-share-square"></button>
+            <button id="settings-button" class="bg-gray-500 text-white rounded p-2 text-sm ml-2 fa-solid fa-sliders-h"></button>
+            <button id="toggle-prompts" class="bg-gray-500 text-white rounded p-2 text-sm fa-solid fa-comment-dots"></button>
+        </div>
+        <div id="common-prompts" class="mb-4 flex flex-wrap gap-2 hidden"></div>
+        <form id="chat-form" class="flex flex-col space-y-2">
+            <div class="flex space-x-2">
+                <input type="text" id="url-input" class="border rounded p-2 flex-grow" placeholder="Enter URL" value={{urls}}>
+                <label for="file-input" class="cursor-pointer bg-blue-500 text-white text-xl rounded p-2 fa-solid fa-paperclip"></label>
+                <input type="file" id="file-input" class="hidden" multiple>
+            </div>
+            <div class="flex space-x-2">
+                <input type="text" id="user-input" class="border rounded p-2 flex-grow" placeholder="Type your message...", value={{prompt}}>
+                <button type="submit" class="bg-blue-500 text-white rounded p-2">Send</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="conversations-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
+        <div class="bg-white p-4 rounded-lg w-3/4 h-3/4 overflow-auto">
+            <button id="close-conversations" class="mt-4 p-2 float-right fa-solid fa-close"></button>
+            <h2 class="text-xl font-bold mb-4">Conversations</h2>
+            <input type="text" id="filtering-input" class="border rounded p-2 flex-grow" placeholder="Search">
+            <div class="mb-4">
+                <label class="flex items-center">
+                    <input type="checkbox" id="query_db" name="query_db" class="mr-2">
+                    History in Database
+                </label>
+            </div>
+            <div id="conversations-list"></div>
+            <div id="load-more" class="text-center py-4 hidden">
+                <span class="text-blue-500 cursor-pointer">Load More</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
+        <div class="bg-white p-4 rounded-lg w-1/2">
+            <h2 class="text-xl font-bold mb-4">Settings</h2>
+            <form id="settings-form">
+                <div class="mb-4">
+                    <label for="model" class="block mb-2">Model:</label>
+                    <input type="text" id="model" name="model" class="border rounded p-2 w-full" value="models/gemini-1.5-flash">
+                </div>
+                <div class="mb-4">
+                    <label for="scraper" class="block mb-2">Scraper:</label>
+                    <select id="scraper" name="scraper" class="border rounded p-2 w-full">
+                        <option value="jina">jina</option>
+                        <option value="firecrawl">firecrawl</option>
+                        <option value="magic_markdownify">magic_markdownify</option>
+                        <option value="readability_markdownify">readability_markdownify</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="srt_to_txt" name="srt_to_txt" class="mr-2">
+                        Convert SRT to TXT
+                    </label>
+                </div>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="pdf_to_markdown" name="pdf_to_markdown" class="mr-2">
+                        Convert PDF to Markdown
+                    </label>
+                </div>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="transcribe" name="transcribe" class="mr-2" checked>
+                        Transcribe audio files
+                    </label>
+                </div>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="extract_images" name="extract_images" class="mr-2">
+                        Extract markdown images
+                    </label>
+                </div>
+                <button type="submit" class="bg-blue-500 text-white rounded p-2">Save</button>
+                <button type="button" id="close-settings" class="bg-red-500 text-white rounded p-2 ml-2">Close</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentConversationId = null;
+        let currentOffset = 0;
+
+        const settings = {
+            model: 'models/gemini-1.5-flash',
+            scraper: 'jina',
+            srt_to_txt: false,
+            pdf_to_markdown: false,
+            transcribe: true
+        };
+
+        const commonPrompts = [
+            "请将这些图片中的文字提取出来。",
+            "请总结这篇文章的主要内容。",
+            "请总结这篇论文的主要内容与发现。",
+            "请根据视频字幕总结主持人的主要观点",
+            "请根据这篇视频转录稿总结主持人的主要观点",
+            "请根据这篇音频转录稿总结主持人的主要观点"
+        ]
+
+        function createCommonPrompts() {
+            const container = document.getElementById('common-prompts');
+            commonPrompts.forEach(prompt => {
+                const button = document.createElement('button');
+                button.textContent = prompt;
+                button.className = 'bg-gray-200 text-gray-700 rounded p-2';
+                button.addEventListener('click', () => {
+                    document.getElementById('user-input').value = prompt;
+                    container.classList.add('hidden');
+                });
+                container.appendChild(button);
+            });
+        }
+
+        async function createConversation(files, urls) {
+            let response;
+            if (files && files.length > 0) {
+                const formData = new FormData();
+                Array.from(files).forEach(file => formData.append('files', file));
+                urls.forEach(url => formData.append('urls', url));
+                Object.keys(settings).forEach(key => formData.append(key, settings[key]));
+
+                response = await fetch('/conversations', {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                response = await fetch('/conversations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ...settings, urls })
+                });
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to create conversation');
+            }
+
+            const data = await response.json();
+            loadConversation(data.conversation_id);
+            return data.conversation_id;
+        }
+
+        async function sendMessage(conversationId, message) {
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send message');
+            }
+
+            const data = await response.json();
+            return data.response;
+        }
+
+        function addMessageToChat(role, content) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageElement = document.createElement('div');
+            messageElement.className = `mb-2 ${role === 'user' ? 'text-right' : 'text-left'}`;
+            messageElement.innerHTML = `
+                <div class="inline-block bg-${role === 'user' ? 'blue' : 'gray'}-200 rounded px-2 py-1">
+                    ${marked(content)}
+                </div>
+            `;
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function clearMessageFromChat() {
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.innerHTML = '';
+        }
+
+        async function fetchConversations(offset=0, limit=10) {
+            const query_db = document.getElementById('query_db').checked;
+            const filtering = document.getElementById('filtering-input').value;
+            
+            const response = await fetch(`http://127.0.0.1:5000/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch conversations');
+            }
+            return response.json();
+        }
+
+        function formatConversations(conversations, clear=false) {
+            const list = document.getElementById('conversations-list');
+            if (clear) {
+                list.innerHTML = '';
+                currentOffset = 0;
+            }
+            conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'mb-4 p-2 border rounded';
+                item.innerHTML = `
+                    <p><strong>ID:</strong> ${conv.id}</p>
+                    <p><strong>Timestamp:</strong> ${new Date(conv.timestamp).toISOString()}</p>
+                    <p><strong>URLs:</strong> ${conv.urls.join(', ') || 'None'}</p>
+                    <p><strong>Files:</strong> ${conv.files.join(', ') || 'None'}</p>
+                    <p><strong>Uploaded Files:</strong> ${Object.values(conv.ready_files).join(', ') || 'None'}</p>
+                `;
+                item.addEventListener('click', () => {
+                    currentConversationId = conv.id;
+                    document.getElementById('conversations-modal').classList.add('hidden');
+                    loadConversation(conv.id);
+                });
+                list.appendChild(item);
+            });
+        }
+
+        async function listConversations(offset=0, limit=4, clear=true) {
+            try {
+                console.log(offset, limit);
+                const conversations = await fetchConversations(offset, limit);
+                formatConversations(conversations, clear);
+                if(conversations.length > 0){
+                    currentOffset += limit;
+                    document.getElementById('load-more').classList.remove('hidden');
+                }else{
+                    document.getElementById('load-more').classList.add('hidden');
+                }
+                document.getElementById('conversations-modal').classList.remove('hidden');
+                document.getElementById('conversations-modal').classList.add('flex');
+                return conversations;
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function newConversation() {
+            currentConversationId = null
+            clearMessageFromChat();
+        }
+
+        async function loadConversation(conversationId) {
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/json`);
+            if (!response.ok) {
+                throw new Error('Failed to load conversation');
+            }
+            const data = await response.json();
+            document.getElementById('chat-container').innerHTML = '';
+            data.forEach(msg => {
+                const content = msg.parts.map(function(part){
+                    if(!part.hasOwnProperty('file_data')){
+                        return part
+                    }else{
+                        return ''
+                    }
+                }).join('\n')
+                if(content != ''){
+                    addMessageToChat(msg.role, content);
+                }
+            });
+        }
+
+        async function saveConversation(){
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${currentConversationId}`, {method: 'PUT'});
+            if (!response.ok) {
+                throw new Error('Failed to delete conversation');
+            }
+        }
+
+        async function deleteConversation(){
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${currentConversationId}`, {method: 'DELETE'});
+            if (!response.ok) {
+                throw new Error('Failed to delete conversation');
+            }else{
+                currentConversationId = null
+            }
+        }
+
+        function updateSettingsFromParams(urlParams) {
+            const valid_params = ['overwrite', 'extract_images', 'no_transcribe', 'pdf_to_markdown', 'timeout',
+            'wait_for_selector', 'targe_selector', 'removeTags', 'onlyIncludeTags', 'onlyMainContent', 'scraper', 'srt_to_txt']
+            urlParams.entries().forEach(entry => {
+                const [key, value] = entry;
+                if(valid_params.includes(key)){
+                    if(['true', 'false'].includes(value.toLowerCase())){
+                        settings[key] = value.toLowerCase() == 'true' ? true : false
+                    }else{
+                        settings[key] = value
+                    }
+                }
+            })
+            console.log(settings)
+        }
+
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userInput = document.getElementById('user-input');
+            const fileInput = document.getElementById('file-input');
+            const urlInput = document.getElementById('url-input');
+
+            const message = userInput.value.trim();
+            const files = fileInput.files;
+            const urls = urlInput.value.trim() ? [urlInput.value.trim()] : [];
+
+            if (!message && files.length === 0 && urls.length === 0) return;
+
+            addMessageToChat('user', message || 'Uploading files/URLs...');
+
+            try {
+                if (!currentConversationId) {
+                    currentConversationId = await createConversation(files, urls);
+                }
+
+                if(message != ""){
+                    const response = await sendMessage(currentConversationId, message);
+                    addMessageToChat('assistant', response);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('assistant', 'An error occurred. Please try again.');
+            }
+
+            userInput.value = '';
+            fileInput.value = '';
+            urlInput.value = '';
+        });
+
+        document.getElementById('new-conversation').addEventListener('click', newConversation);
+
+        document.getElementById('save-conversation').addEventListener('click', saveConversation);
+
+        document.getElementById('view-conversations').addEventListener('click', () => {listConversations()});
+        document.getElementById('query_db').addEventListener('click', () => {listConversations()});
+        document.getElementById('filtering-input').addEventListener('change', () => {listConversations()});
+
+        document.getElementById('delete-conversation').addEventListener('click', deleteConversation);
+
+        document.getElementById('close-conversations').addEventListener('click', () => {
+            document.getElementById('conversations-modal').classList.add('hidden');
+            document.getElementById('conversations-modal').classList.remove('flex');
+        });
+
+        document.getElementById('settings-button').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.remove('hidden');
+            document.getElementById('settings-modal').classList.add('flex');
+        });
+
+        document.getElementById('close-settings').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.add('hidden');
+            document.getElementById('settings-modal').classList.remove('flex');
+        });
+
+        document.getElementById('settings-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            for (let [key, value] of formData.entries()) {
+                if (value === 'on') {
+                    value = true;
+                } else if (value === 'off') {
+                    value = false;
+                }
+                settings[key] = value;
+            }
+            document.getElementById('settings-modal').classList.add('hidden');
+            document.getElementById('settings-modal').classList.remove('flex');
+        });
+
+        document.getElementById('toggle-prompts').addEventListener('click', () => {
+            const prompts = document.getElementById('common-prompts');
+            if(!prompts.className.includes('hidden')){
+                prompts.classList.add('hidden')
+            }else{
+                prompts.classList.remove('hidden')
+            }
+        });
+
+        function setupInfiniteScroll() {
+            const modalContent = document.querySelector('#conversations-modal > div');
+            modalContent.addEventListener('scrollend', async () => {
+                if (modalContent.scrollTop + modalContent.clientHeight >= modalContent.scrollHeight - 10) {
+                    listConversations(currentOffset, 4, clear=false);
+                }
+            });
+        }
+
+        // Handle query string parameters
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urls = urlParams.get('urls');
+            const prompt = urlParams.get('prompt');
+
+            if (urls) {
+                document.getElementById('url-input').value = urls;
+            }
+
+            if (prompt) {
+                document.getElementById('user-input').value = prompt;
+            }
+
+            if (urls) {
+                document.querySelector('button[type="submit"]').click();
+            }
+
+            updateSettingsFromParams(urlParams);
+            createCommonPrompts();
+            setupInfiniteScroll();
+        });
+
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/statics/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
