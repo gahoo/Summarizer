@@ -12,6 +12,10 @@ load_dotenv()
 FIRECRAWL_API_KEY=os.getenv('FIRECRAWL_API_KEY')
 JINA_API_KEY=os.getenv('JINA_API_KEY', None)
 MARKER_API_URL = os.getenv('MARKER_API_URL')
+DOWNLOADER_FOLDER = os.getenv('DOWNLOADER_FOLDER', './')
+
+def download_path(filename):
+    return os.path.join(DOWNLOADER_FOLDER, filename)
 
 def get_url_basename(url):
     return os.path.splitext(os.path.basename(url))[0][:20]
@@ -25,7 +29,7 @@ def firecrawl(url, **kwargs):
     app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
     params = build_firecrawl_params(**kwargs)
     response = app.scrape_url(url, params)
-    filename = response['metadata'].get('title', 'Untitled') + '.firecrawl.md'
+    filename = download_path(response['metadata'].get('title', 'Untitled') + '.firecrawl.md')
     write_flie(filename, response['markdown'])
     return filename
 
@@ -46,7 +50,7 @@ def jina(url, **kwargs):
 
     response = requests.post('https://r.jina.ai/', headers=headers, data=data)
     json = response.json()
-    filename = json['data'].get('title', 'Untitled') + '.jina.md'
+    filename = download_path(json['data'].get('title', 'Untitled') + '.jina.md')
     write_flie(filename, json['data']['content'])
     return filename
 
@@ -76,21 +80,21 @@ def magic_markdownify(url):
     data = extractor.extract(response.text, base_url=url)
     content = markdownify(data['html']).strip()
     markdown = '# {title}\n\n{content}'.format(title=data['title'], content=content)
-    filename = data.get('title', 'Untitled') + '.magic.md'
+    filename = download_path(data.get('title', 'Untitled') + '.magic.md')
     write_flie(filename, markdown)
     return filename
     
 def readability_markdownify(url):
     response = requests.get(url)
     doc = Document(response.text)
-    filename = doc.title() + '.readability.md'
+    filename = download_path(doc.title() + '.readability.md')
     content = markdownify(doc.summary())
     markdown = '# {title}\n\n{content}'.format(title=doc.title(), content=content)
     write_flie(filename, markdown)
     return filename
 
 def download_file(url):
-    filename = os.path.basename(url)
+    filename = download_path(os.path.basename(url))
 
     if os.path.exists(filename):
         local_file_size = os.path.getsize(filename)
@@ -98,6 +102,7 @@ def download_file(url):
         local_file_size = 0
 
     try:
+        print(f"Downloading {url} to {filename}")
         response = requests.get(url, stream=True)
         response.raise_for_status()
 
@@ -121,7 +126,7 @@ def download_file(url):
 
     except requests.exceptions.HTTPError as err:
         print("File download failed:", url)
-        return None
+        raise err
 
 def extract_markdown_images(filename):
     with open(filename, 'r') as file:

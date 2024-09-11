@@ -7,6 +7,7 @@ import requests
 import functools
 from dotenv import load_dotenv
 from groq import Groq
+from scraper import download_path
 
 load_dotenv()
 GROQ_API_KEY=os.getenv('GROQ_API_KEY')
@@ -86,7 +87,7 @@ def download_captions(url, cookies_file=None, language=None, convert_to_txt=Fals
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        safe_title = "".join([c for c in info['title'] if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+        safe_title = download_path("".join([c for c in info['title'] if c.isalpha() or c.isdigit() or c==' ']).rstrip())
         ydl.params['outtmpl']['default'] = f'{safe_title}.%(ext)s'
         if info.get('subtitles') and 'live_chat' not in info.get('subtitles'):
             if not language:
