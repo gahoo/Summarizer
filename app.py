@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, render_template, send_from_directory
 import atexit
 from typing import Dict
 import os
 import pdb
 from werkzeug.utils import secure_filename
-from Summarize2 import GeminiSummarizer, genai, query_history
+from Summarize import GeminiSummarizer, genai, query_history
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -38,19 +38,19 @@ def create_conversation():
 
 @app.route('/conversations', methods=['GET'])
 def list_conversations():
-    pdb.set_trace()
     offset = int(request.args.get('offset', 0))
     limit = int(request.args.get('limit', 10))
     query_db = request.args.get('db') == 'true'
-    activated = [v.dict for v in active_conversations.values()]
-    activated_ids = [e['id'] for e in activated]
+    filtering = request.args.get('filtering', None)
+
     if query_db:
-        db = [e.dict for e in query_history(offset, limit)]
-        db = list(filter(lambda e: e['id'] not in activated_ids, db))
+        conversations = [e.dict for e in query_history(offset, limit, filtering)]
     else:
-        db = []
-    conversations = activated + db
-    return jsonify(conversations[offset:offset+limit]), 200
+        conversations = [v.dict for v in active_conversations.values()]
+        if filtering:
+            conversations = filter(lambda e: filtering in "\n".join(e['urls'] + e['files'] + list(e['ready_files'].values())), conversations)
+        conversations = sorted(conversations, key=lambda e: e['timestamp'], reverse=True)[offset:offset+limit]
+    return jsonify(conversations), 200
 
 @app.route('/conversations/<conversation_id>', methods=['PUT'])
 def save_conversation(conversation_id):
@@ -118,6 +118,21 @@ def get_conversation_markdown(conversation_id):
         return jsonify({"error": "Conversation not found"}), 404
     
     return summarizer.markdown, 200, {'Content-Type': 'text/markdown'}
+
+@app.route('/')
+@app.route('/index.html')
+def index():
+    urls = request.args.get('urls', '')
+    prompt = request.args.get('prompt', '')
+    return render_template('index.html', urls=urls, prompt=prompt)
+
+@app.route('/manifest.json')
+def manifest():
+    return send_file('statics/manifest.json')
+
+@app.route('/statics/<filename>')
+def statics(filename):
+    return send_from_directory('statics/', filename)
 
 def save_active_conversations():
     for summarizer in active_conversations.values():
