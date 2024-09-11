@@ -269,9 +269,17 @@ class GeminiSummarizer(Base):
         if 'markdown' in formats:
             write_flie(prefix + ".gemini.md", self.markdown)
 
-def query_history(offset, limit):
+def query_history(offset, limit, filtering=None):
     session = sessionmaker(bind=ENGINE)()
-    result = session.query(GeminiSummarizer).order_by(GeminiSummarizer.timestamp.desc()).offset(offset).limit(limit).all() 
+    query = session.query(GeminiSummarizer)
+    if filtering:
+        print(filtering)
+        query = query.filter(
+            GeminiSummarizer.urls.like(f'%{filtering}%') |
+            GeminiSummarizer.files.like(f'%{filtering}%') |
+            GeminiSummarizer.uri2path.like(f'%{filtering}%')
+        )
+    result = query.order_by(GeminiSummarizer.timestamp.desc()).offset(offset).limit(limit).all() 
     session.close()
     return result
     
