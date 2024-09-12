@@ -10,6 +10,7 @@ import atexit
 from pathlib import Path
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, download_file, extract_markdown_images, write_flie
+from tokens import tokens
 from subtitle_downloader import download_captions
 from sqlalchemy import create_engine, Column, String, DateTime, Text
 from sqlalchemy.orm import declarative_base
@@ -17,8 +18,8 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 Base = declarative_base()
-CONVERSATION_DB = os.getenv('CONVERSATION_DB', 'sqlite:///summarizer.db')
-ENGINE = create_engine(CONVERSATION_DB)
+ENGINES = {v: create_engine(f'sqlite:///{v}.db') for v in tokens.values()}
+ENGINES["summarizer"] = create_engine("sqlite:///summarizer.db") # fallback
 
 class GeminiSummarizer(Base):
     __tablename__ = 'conversations'
@@ -30,7 +31,7 @@ class GeminiSummarizer(Base):
     files = Column(Text)
     urls = Column(Text)
 
-    def __init__(self, model="models/gemini-1.5-flash", id=None, files=[], urls=[], overwrite=False, **kwargs):
+    def __init__(self, model="models/gemini-1.5-flash", id=None, files=[], urls=[], db='', overwrite=False, **kwargs):
         super().__init__()
         self.model = genai.GenerativeModel(
             model_name=model,
@@ -48,10 +49,12 @@ class GeminiSummarizer(Base):
         self.ready_files = []
         self.timestamp = datetime.now()
         self.history = kwargs.get('history', [])
-        self.Session = sessionmaker(bind=ENGINE)
+        self.db = db
+        self.engine = ENGINES.get(db, ENGINES["summarizer"])
+        self.Session = sessionmaker(bind=self.engine)
         self.id = self.generate_id(id)
 
-        Base.metadata.create_all(ENGINE)
+        Base.metadata.create_all(self.engine)
 
         if not overwrite:
             self.load_conversation(self.id)
@@ -203,6 +206,8 @@ class GeminiSummarizer(Base):
                     return prefix + part['text']
         
         md = []
+        if self.urls:
+            md.append("> " + "\n".join(self.urls))
         for entry in history:
             if entry['role'] == 'user':
                 md.append("-" * 10)
@@ -219,7 +224,7 @@ class GeminiSummarizer(Base):
             session.merge(self)
             session.commit()
             session.close()
-            print(f"Saved conversation with ID: {self.id}")
+            print(f"Saved conversation with ID: {self.id} into {self.db}.db")
             self.from_string()
 
     def to_string(self):
@@ -269,8 +274,9 @@ class GeminiSummarizer(Base):
         if 'markdown' in formats:
             write_flie(prefix + ".gemini.md", self.markdown)
 
-def query_history(offset, limit, filtering=None):
-    session = sessionmaker(bind=ENGINE)()
+def query_history(offset, limit, filtering=None, db=''):
+    engine = ENGINES.get(db, ENGINES["summarizer"])
+    session = sessionmaker(bind=engine)()
     query = session.query(GeminiSummarizer)
     if filtering:
         print(filtering)
