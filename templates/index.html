@@ -40,11 +40,9 @@
                 <input type="text" id="url-input" class="border rounded p-2 flex-grow" placeholder="Enter URL" value={{urls}}>
                 <label for="file-input" class="cursor-pointer bg-blue-500 text-white text-xl rounded p-2 fa-solid fa-paperclip"></label>
                 <input type="file" id="file-input" class="hidden" multiple>
-            </div>
-            <div class="flex space-x-2">
-                <input type="text" id="user-input" class="border rounded p-2 flex-grow" placeholder="Type your message...", value={{prompt}}>
                 <button type="submit" class="bg-blue-500 text-white rounded p-2">Send</button>
             </div>
+            <textarea id="user-input" class="border rounded p-2 w-full" rows="2" placeholder="Type your message...", value={{prompt}}></textarea>
         </form>
     </div>
 
@@ -178,27 +176,36 @@
 
         async function createConversation(files, urls) {
             let response;
+            const paperclip_label = document.getElementById('file-input').labels[0];
+            paperclip_label.classList.add('animate-bounce')
+
             if (files && files.length > 0) {
                 const formData = new FormData();
                 Array.from(files).forEach(file => formData.append('files', file));
                 urls.forEach(url => formData.append('urls', url));
-                Object.keys(settings).forEach(key => formData.append(key, settings[key]));
+                Object.keys(settings).forEach(key => formData.append(key, settings[key]));    
 
                 response = await fetch('/conversations', {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${settings.api_key}`
+                    },
                     body: formData
                 });
             } else {
                 response = await fetch('/conversations', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${settings.api_key}`
                     },
                     body: JSON.stringify({ ...settings, urls })
                 });
             }
 
+            paperclip_label.classList.remove('animate-bounce')
             if (!response.ok) {
+                showWarningOnButton(paperclip_label);
                 throw new Error('Failed to create conversation');
             }
 
@@ -208,13 +215,21 @@
         }
 
         async function sendMessage(conversationId, message) {
+            const send_button = document.querySelector('#chat-form button[type="submit"]')
+            const spiner = document.createElement('i');
+            spiner.className = "fa-solid fa-spinner animate-spin";
+            send_button.appendChild(spiner);
+
             const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/messages`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.api_key}`
                 },
                 body: JSON.stringify({ message })
             });
+
+            spiner.remove();
 
             if (!response.ok) {
                 throw new Error('Failed to send message');
@@ -264,7 +279,9 @@
             const query_db = document.getElementById('query_db').checked;
             const filtering = document.getElementById('filtering-input').value;
             
-            const response = await fetch(`http://127.0.0.1:5000/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`);
+            const response = await fetch(`http://127.0.0.1:5000/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`,{
+                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            });
             
             if (!response.ok) {
                 throw new Error('Failed to fetch conversations');
@@ -309,7 +326,7 @@
             });
         }
 
-        async function listConversations(offset=0, limit=4, clear=true) {
+        async function listConversations(offset=0, limit=10, clear=true) {
             try {
                 console.log(offset, limit);
                 const conversations = await fetchConversations(offset, limit);
@@ -334,12 +351,14 @@
         }
 
         async function loadConversation(conversationId) {
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/json`);
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/json`,{
+                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            });
             if (!response.ok) {
                 throw new Error('Failed to load conversation');
             }
             const data = await response.json();
-            document.getElementById('chat-container').innerHTML = '';
+            
             data.forEach(msg => {
                 const content = msg.parts.map(function(part){
                     if(!part.hasOwnProperty('file_data')){
@@ -349,29 +368,52 @@
                     }
                 }).join('\n')
                 if(content != ''){
+                    clearMessageFromChat();
                     addMessageToChat(msg.role, content);
                 }
             });
         }
 
         async function saveConversation(){
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${currentConversationId}`, {method: 'PUT'});
+            const save_button = event.target;
+            event.target.classList.add('animate-bounce');
+            
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${currentConversationId}`, {
+                method: 'PUT',
+                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            });
+
+            setTimeout(() => {save_button.classList.remove('animate-bounce')}, 1000);
             if (!response.ok) {
+                showWarningOnButton(save_button);
                 throw new Error('Failed to delete conversation');
             }
         }
 
         async function deleteConversation(conversationId){
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}`, {method: 'DELETE'});
+            const delete_button = event.target;
+            delete_button.classList.add('animate-ping');
+
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}`, {
+                method: 'DELETE',
+                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            });
+
+            setTimeout(() => {delete_button.classList.remove('animate-ping')}, 1000);
             if (!response.ok) {
+                showWarningOnButton(delete_button);
                 throw new Error('Failed to delete conversation');
             }else{
-                currentConversationId = null
+                if(conversationId == currentConversationId){
+                    currentConversationId = null
+                }
             }
         }
 
         async function loadConversationMarkdown(conversationId){
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/markdown`);
+            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/markdown`, {
+                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            });
             if (!response.ok) {
                 throw new Error('Failed to load conversation markdown');
             }
@@ -411,6 +453,11 @@
 
         applySettings(settings);
 
+        function showWarningOnButton(button) {
+            setTimeout(() => {button.classList.add('fa-triangle-exclamation')}, 1000);
+            setTimeout(() => {button.classList.remove('fa-triangle-exclamation')}, 5000);
+        }
+
         document.getElementById('chat-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userInput = document.getElementById('user-input');
@@ -419,7 +466,7 @@
 
             const message = userInput.value.trim();
             const files = fileInput.files;
-            const urls = urlInput.split(' ').filter(x => x!="");
+            const urls = urlInput.value.split(' ').filter(x => x!="");
 
             if (!message && files.length === 0 && urls.length === 0) return;
 
@@ -442,6 +489,18 @@
             userInput.value = '';
             fileInput.value = '';
             urlInput.value = '';
+        });
+
+        document.getElementById('user-input').addEventListener('keydown', async () => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                const userInput = document.getElementById('user-input');
+                const message = userInput.value.trim();
+                addMessageToChat('user', message);
+                const response = await sendMessage(currentConversationId, message);
+                addMessageToChat('assistant', response);
+                userInput.value = '';
+            }
         });
 
         document.getElementById('new-conversation').addEventListener('click', newConversation);
