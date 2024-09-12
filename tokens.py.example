@@ -1,0 +1,4 @@
+tokens = {
+    "secret-token-1": "user1",
+    "secret-token-2": "user2"
+}
