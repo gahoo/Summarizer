@@ -18,8 +18,8 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 Base = declarative_base()
-ENGINES = {v: create_engine(f'sqlite:///{v}.db') for v in tokens.values()}
-ENGINES["summarizer"] = create_engine("sqlite:///summarizer.db") # fallback
+ENGINES = {v: create_engine(f'sqlite:///db/{v}.db') for v in tokens.values()}
+ENGINES["summarizer"] = create_engine("sqlite:///db/summarizer.db") # fallback
 
 class GeminiSummarizer(Base):
     __tablename__ = 'conversations'
