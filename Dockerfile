@@ -8,7 +8,8 @@ RUN apt update && \
     mv Summarizer-master Summarizer && \
     cd Summarizer && \
     mv tokens.py.example tokens.py && \
-    pip install https://github.com/opendatalab/magic-html/releases/download/magic_html-0.1.2-released/magic_html-0.1.2-py3-none-any.whl -r requirements.txt
+    pip install https://github.com/opendatalab/magic-html/releases/download/magic_html-0.1.2-released/magic_html-0.1.2-py3-none-any.whl -r requirements.txt && \
+    sed '278s#www.youtube.com#siteproxy.42bio.info/fxxkgfw/https/www.youtube.com#g' /usr/local/lib/python3.9/site-packages/yt_dlp/extractor/youtube.py -i
 
 RUN pip install pyuwsgi
 RUN useradd summarizer
