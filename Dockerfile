@@ -7,6 +7,7 @@ RUN apt update && \
     rm master.zip && \
     mv Summarizer-master Summarizer && \
     cd Summarizer && \
+    mv tokens.py.example tokens.py && \
     pip install https://github.com/opendatalab/magic-html/releases/download/magic_html-0.1.2-released/magic_html-0.1.2-py3-none-any.whl -r requirements.txt
 
 RUN pip install pyuwsgi
@@ -16,7 +17,6 @@ USER summarizer
 
 WORKDIR /Summarizer
 
-ENV PORT 8000
-ENV HOST 0.0.0.0
+ENV PORT 5000
 
-CMD uwsgi --http ${HOST}:${PORT} --master -p 4 -w app
+CMD uwsgi --http :${PORT} --master -p 4 -w app:app
