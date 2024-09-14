@@ -18,5 +18,6 @@ USER summarizer
 WORKDIR /Summarizer
 
 ENV PORT 5000
+ENV WORKERS 4
 
-CMD uwsgi --http :${PORT} --master -p 4 -w app:app
+CMD uwsgi --http :${PORT} --master -p ${WORKERS} -w app:app
