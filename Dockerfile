@@ -1,7 +1,7 @@
 FROM python:3.9.20-slim-bookworm
 
 RUN apt update && \
-    apt install -y libmagic-dev unzip wget && \
+    apt install -y libmagic-dev unzip wget xz-utils && \
     wget https://github.com/gahoo/Summarizer/archive/refs/heads/master.zip && \
     unzip master && \
     rm master.zip && \
@@ -12,6 +12,12 @@ RUN apt update && \
     sed '278s#www.youtube.com#siteproxy.42bio.info/fxxkgfw/https/www.youtube.com#g' /usr/local/lib/python3.9/site-packages/yt_dlp/extractor/youtube.py -i
 
 RUN pip install pyuwsgi
+
+RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz && \
+    tar -xf ffmpeg-release-amd64-static.tar.xz && \
+    cp ffmpeg-7.0.2-amd64-static/ffmpeg /usr/local/bin/ && \
+    rm ffmpeg-release-amd64-static.tar.xz ffmpeg-7.0.2-amd64-static/
+
 RUN useradd summarizer
 
 USER summarizer
