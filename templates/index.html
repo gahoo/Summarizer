@@ -139,6 +139,7 @@
     <script>
         let currentConversationId = null;
         let currentOffset = 0;
+        const BASE_URL = "";
         const PASTEBIN_URL = 'https://shz.al/';
 
         const settings = {
@@ -220,7 +221,7 @@
             spiner.className = "fa-solid fa-spinner animate-spin";
             send_button.appendChild(spiner);
 
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/messages`, {
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -279,7 +280,7 @@
             const query_db = document.getElementById('query_db').checked;
             const filtering = document.getElementById('filtering-input').value;
             
-            const response = await fetch(`http://127.0.0.1:5000/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`,{
+            const response = await fetch(`${BASE_URL}/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`,{
                 headers: {'Authorization': `Bearer ${settings.api_key}`}
             });
             
@@ -351,7 +352,7 @@
         }
 
         async function loadConversation(conversationId) {
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/json`,{
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/json`,{
                 headers: {'Authorization': `Bearer ${settings.api_key}`}
             });
             if (!response.ok) {
@@ -378,7 +379,7 @@
             const save_button = event.target;
             event.target.classList.add('animate-bounce');
             
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${currentConversationId}`, {
+            const response = await fetch(`${BASE_URL}/conversations/${currentConversationId}`, {
                 method: 'PUT',
                 headers: {'Authorization': `Bearer ${settings.api_key}`}
             });
@@ -394,7 +395,7 @@
             const delete_button = event.target;
             delete_button.classList.add('animate-ping');
 
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}`, {
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}`, {
                 method: 'DELETE',
                 headers: {'Authorization': `Bearer ${settings.api_key}`}
             });
@@ -411,7 +412,7 @@
         }
 
         async function loadConversationMarkdown(conversationId){
-            const response = await fetch(`http://127.0.0.1:5000/conversations/${conversationId}/markdown`, {
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/markdown`, {
                 headers: {'Authorization': `Bearer ${settings.api_key}`}
             });
             if (!response.ok) {
