@@ -438,6 +438,9 @@
         function updateSettingsFromParams(urlParams) {
             const valid_params = ['overwrite', 'extract_images', 'no_transcribe', 'pdf_to_markdown', 'timeout',
             'wait_for_selector', 'targe_selector', 'removeTags', 'onlyIncludeTags', 'onlyMainContent', 'scraper', 'srt_to_txt']
+            if(urlParams.size == 0){
+                return
+            }
             urlParams.entries().forEach(entry => {
                 const [key, value] = entry;
                 if(valid_params.includes(key)){
