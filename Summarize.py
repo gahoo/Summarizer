@@ -7,6 +7,7 @@ import hashlib
 import argparse
 import pdb
 import atexit
+import functools
 from pathlib import Path
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, download_file, extract_markdown_images, write_flie
@@ -21,6 +22,25 @@ Base = declarative_base()
 ENGINES = {v: create_engine(f'sqlite:///db/{v}.db') for v in tokens.values()}
 ENGINES["summarizer"] = create_engine("sqlite:///db/summarizer.db") # fallback
 
+def set_gemini_proxy(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        GEMINI_PROXY = os.getenv('GEMINI_PROXY', '')
+        if GEMINI_PROXY:
+            http_proxy = os.environ.pop('http_proxy', '')
+            https_proxy = os.environ.pop('https_proxy', '')
+
+            os.environ['http_proxy'] = os.getenv('GEMINI_PROXY', '')
+            os.environ['https_proxy'] = os.getenv('GEMINI_PROXY', '')
+
+        result = func(*args, **kwargs)
+
+        if GEMINI_PROXY:
+            os.environ['http_proxy'] = http_proxy
+            os.environ['https_proxy'] = https_proxy
+        return result
+    return wrapper
+
 class GeminiSummarizer(Base):
     __tablename__ = 'conversations'
 
@@ -31,7 +51,7 @@ class GeminiSummarizer(Base):
     files = Column(Text)
     urls = Column(Text)
 
-    def __init__(self, model="models/gemini-1.5-flash", id=None, files=[], urls=[], db='', overwrite=False, **kwargs):
+    def __init__(self, model="models/gemini-1.5-flash", id=None, files=[], urls=[], db='summarizer', overwrite=False, **kwargs):
         super().__init__()
         self.model = genai.GenerativeModel(
             model_name=model,
@@ -100,11 +120,14 @@ class GeminiSummarizer(Base):
             image_files = [download_file(url) for url in image_urls]
             self.ready_files.extend(self.upload(image_files))
 
+    @set_gemini_proxy
     def upload(self, files):
         uploaded_files = []
         for file in files:
             mime = magic.Magic(mime=True)
             mime_type = mime.from_file(file)
+            if mime_type == 'application/x-subrip':
+                mime_type = 'text/plain'
             print(f"Uploading file '{file}' as {mime_type}...")
             uploaded_file = genai.upload_file(file, mime_type=mime_type, display_name=file)
             print(f"Uploaded file '{uploaded_file.display_name}' as: {uploaded_file.uri}")
@@ -137,6 +160,7 @@ class GeminiSummarizer(Base):
         elif scraper == 'readability_markdownify':
             return readability_markdownify(url)
 
+    @set_gemini_proxy
     def wait_for_files_active(self, files):
         ready_files = []
         print("Waiting for file processing...")
@@ -158,6 +182,7 @@ class GeminiSummarizer(Base):
             history.append({"role": "user", "parts": ready_files})
         self.chat = self.model.start_chat(history=history)
 
+    @set_gemini_proxy
     def send(self, message):
         response = self.chat.send_message(message)
         return response.text
@@ -288,7 +313,7 @@ def query_history(offset, limit, filtering=None, db=''):
     result = query.order_by(GeminiSummarizer.timestamp.desc()).offset(offset).limit(limit).all() 
     session.close()
     return result
-    
+
 
 # Usage example:
 if __name__ == '__main__':
