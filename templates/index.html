@@ -360,6 +360,7 @@
                 throw new Error('Failed to load conversation');
             }
             const data = await response.json();
+            clearMessageFromChat();
             
             data.forEach(msg => {
                 const content = msg.parts.map(function(part){
@@ -370,7 +371,6 @@
                     }
                 }).join('\n')
                 if(content != ''){
-                    clearMessageFromChat();
                     addMessageToChat(msg.role, content);
                 }
             });
