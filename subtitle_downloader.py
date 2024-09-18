@@ -126,10 +126,15 @@ def download_youtube_captions(url, ydl, safe_title, language, automatic_captions
         return f'{safe_title}.{language}.srt'
 
 def download_youtube_audio(url, ydl, safe_title):
-    ydl.format_selector = ydl.build_format_selector('139')
+    if 'youtube.com' in url or 'youtu.be' in url:
+        ydl.format_selector = ydl.build_format_selector('139')
+        ext = 'm4a'
+    elif 'x.com' in url or 'twitter.com' in url:
+        ydl.format_selector = ydl.build_format_selector('hls-audio-32000-Audio')
+        ext = 'mp4'
     ydl.params['skip_download'] = False
     ydl.download([url])
-    audio_file = f"{safe_title}.m4a"
+    audio_file = f"{safe_title}.{ext}"
     return audio_file
 
 def groq_transcribe(audio_file, language):
