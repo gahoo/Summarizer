@@ -26,13 +26,13 @@
     <div class="container mx-auto p-4">
         <div id="chat-container" class="chat-container bg-white rounded-lg shadow p-4 mb-4"></div>
         <div class="mb-4">
-            <button id="new-conversation" class="bg-green-500 text-white rounded p-2 text-sm fa-solid fa-plus"></button>
-            <button id="view-conversations" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-eye"></button>
-            <button id="save-conversation" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-floppy-disk"></button>
-            <button id="delete-conversation" class="bg-red-500 text-white rounded p-2 text-sm fa-solid fa-trash-can"></button>
-            <button id="share-conversation" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-share-square"></button>
-            <button id="settings-button" class="bg-gray-500 text-white rounded p-2 text-sm ml-2 fa-solid fa-sliders-h"></button>
-            <button id="toggle-prompts" class="bg-gray-500 text-white rounded p-2 text-sm fa-solid fa-comment-dots"></button>
+            <button id="new-conversation" class="bg-green-500 text-white rounded p-2 text-xl fa-solid fa-plus"></button>
+            <button id="view-conversations" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-eye"></button>
+            <button id="save-conversation" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-floppy-disk"></button>
+            <button id="delete-conversation" class="bg-red-500 text-white rounded p-2 text-xl fa-solid fa-trash-can"></button>
+            <button id="share-conversation" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-share-square"></button>
+            <button id="settings-button" class="bg-gray-500 text-white rounded p-2 text-xl ml-2 fa-solid fa-sliders-h"></button>
+            <button id="toggle-prompts" class="bg-gray-500 text-white rounded p-2 text-xl fa-solid fa-comment-dots"></button>
         </div>
         <div id="common-prompts" class="mb-4 flex flex-wrap gap-2 hidden"></div>
         <form id="chat-form" class="flex flex-col space-y-2">
@@ -306,9 +306,9 @@
                     <p><strong>URLs:</strong> ${conv.urls.join(', ') || 'None'}</p>
                     <p><strong>Files:</strong> ${conv.files.join(', ') || 'None'}</p>
                     <p><strong>Uploaded Files:</strong> ${Object.values(conv.ready_files).join(', ') || 'None'}</p>
-                    <button class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-file-import"><button>
-                    <button class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-share-from-square"><button>
-                    <button class="bg-red-500 text-white rounded p-2 text-sm fa-solid fa-trash-can"><button>
+                    <button class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-file-import"><button>
+                    <button class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-share-from-square"><button>
+                    <button class="bg-red-500 text-white rounded p-2 text-xl fa-solid fa-trash-can"><button>
                 `;
                 item.querySelector('button.fa-file-import').addEventListener('click', () => {
                     currentConversationId = conv.id;
