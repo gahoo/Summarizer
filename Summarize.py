@@ -93,8 +93,11 @@ class GeminiSummarizer(Base):
 
     def generate_id(self, id=None):
         if not id:
-            content = json.dumps(self.files + self.urls)
-            id = hashlib.sha256(content.encode()).hexdigest()
+            content = "".join(self.files + self.urls)
+            if content:
+                id = hashlib.sha256(content.encode()).hexdigest()
+            else:
+                id = hashlib.sha256(str(datetime.now().timestamp()).encode()).hexdigest()
         return id
 
     def load_conversation(self, id):
