@@ -141,7 +141,7 @@ class GeminiSummarizer(Base):
         return self.upload(scraped_files)
 
     def url2file(self, url, **kwargs):
-        if 'youtube.com' in url or 'youtu.be' in url:
+        if 'youtube.com' in url or 'youtu.be' in url or 'x.com' in url or 'twitter.com' in url:
             return download_captions(url, kwargs.get('cookies', kwargs.get('cookies')), 
                                      convert_to_txt=kwargs.get('srt_to_txt', kwargs.get('srt_to_txt')), 
                                      transcribe=kwargs.get('transcribe', kwargs.get('transcribe', True)))
