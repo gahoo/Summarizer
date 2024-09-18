@@ -47,7 +47,7 @@
     </div>
 
     <div id="conversations-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white p-4 rounded-lg w-3/4 h-3/4 overflow-auto">
+        <div class="bg-white p-4 rounded-lg w-11/12 h-5/6 overflow-auto">
             <button id="close-conversations" class="mt-4 p-2 float-right fa-solid fa-close"></button>
             <h2 class="text-xl font-bold mb-4">Conversations</h2>
             <input type="text" id="filtering-input" class="border rounded p-2 w-full" placeholder="Search">
@@ -65,7 +65,7 @@
     </div>
 
     <div id="settings-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white p-4 rounded-lg w-1/2">
+        <div class="bg-white p-4 rounded-lg w-5/6">
             <h2 class="text-xl font-bold mb-4">Settings</h2>
             <form id="settings-form">
                 <div class="mb-4">
@@ -117,7 +117,7 @@
     </div>
 
     <div id="share-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white p-4 rounded-lg w-1/2">
+        <div class="bg-white p-4 rounded-lg w-11/12">
             <h2 class="text-xl font-bold mb-4">Share</h2>
             <form id="share-form">
                 <textarea id="markdown" name="c" rows="16" class="border rounded p-2 w-full"></textarea>
@@ -575,7 +575,9 @@
             document.getElementById('share-url').value = result.url.replace(PASTEBIN_URL, PASTEBIN_URL + 'a/');
         });
 
-        document.getElementById('share-url').addEventListener('focus', () => {this.select()});
+        document.getElementById('share-url').addEventListener('focus', (e) => {
+            e.target.select()
+        });
 
         document.getElementById('preview').addEventListener('click', () => {
             const url = document.getElementById('share-url').value;
