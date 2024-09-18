@@ -3,6 +3,7 @@ from flask_httpauth import HTTPTokenAuth
 import atexit
 from typing import Dict
 import os
+import threading
 import pdb
 from werkzeug.utils import secure_filename
 from Summarize import GeminiSummarizer, genai, query_history
@@ -15,8 +16,8 @@ auth = HTTPTokenAuth(scheme='Bearer')
 
 
 # In-memory storage for active conversations
-#active_conversations[db]: Dict[str, GeminiSummarizer] = {}
 active_conversations = {db: {} for db in tokens.values()}
+active_conversations_lock = threading.Lock()
 
 # Load the API key
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
@@ -45,7 +46,9 @@ def create_conversation():
     
     data['db'] = auth.current_user()
     summarizer = GeminiSummarizer(**data)
-    active_conversations[data['db']][summarizer.id] = summarizer
+    with active_conversations_lock:
+        active_conversations[data['db']][summarizer.id] = summarizer
+    summarizer.save()
     
     return jsonify({"conversation_id": summarizer.id}), 201
 
@@ -60,7 +63,8 @@ def list_conversations():
     if query_db:
         conversations = [e.dict for e in query_history(offset, limit, filtering, db=auth.current_user())]
     else:
-        conversations = [v.dict for v in active_conversations[auth.current_user()].values()]
+        with active_conversations_lock:
+            conversations = [v.dict for v in active_conversations[auth.current_user()].values()]
         if filtering:
             conversations = filter(lambda e: filtering in "\n".join(e['urls'] + e['files'] + list(e['ready_files'].values())), conversations)
         conversations = sorted(conversations, key=lambda e: e['timestamp'], reverse=True)[offset:offset+limit]
@@ -69,15 +73,18 @@ def list_conversations():
 @app.route('/conversations/<conversation_id>', methods=['PUT'])
 @auth.login_required
 def save_conversation(conversation_id):
-    summarizer = active_conversations[auth.current_user()].get(conversation_id)
+    with active_conversations_lock:
+        summarizer = active_conversations[auth.current_user()].get(conversation_id)
     if summarizer:
         summarizer.save()
+        active_conversations[auth.current_user()].pop(conversation_id)
         return jsonify({"message": f"Conversation {conversation_id} saved successfully"}), 200
     else:
         return jsonify({"error": "Conversation not found"}), 404
 
 def get_summarizer(conversation_id, cache=False):
-    summarizer = active_conversations[auth.current_user()].get(conversation_id, GeminiSummarizer(id=conversation_id, db=auth.current_user()))
+    with active_conversations_lock:
+        summarizer = active_conversations[auth.current_user()].get(conversation_id, GeminiSummarizer(id=conversation_id, db=auth.current_user()))
     if summarizer.history:
         if cache and conversation_id not in active_conversations[auth.current_user()]:
             active_conversations[auth.current_user()][conversation_id] = summarizer
@@ -97,7 +104,8 @@ def get_conversation(conversation_id):
 @app.route('/conversations/<conversation_id>', methods=['DELETE'])
 @auth.login_required
 def delete_conversation(conversation_id):
-    summarizer = active_conversations[auth.current_user()].pop(conversation_id, GeminiSummarizer(id=conversation_id, db=auth.current_user()))
+    with active_conversations_lock:
+        summarizer = active_conversations[auth.current_user()].pop(conversation_id, GeminiSummarizer(id=conversation_id, db=auth.current_user()))
 
     if summarizer.history:
         summarizer.delete()
@@ -162,4 +170,4 @@ def save_active_conversations():
 atexit.register(save_active_conversations)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")
