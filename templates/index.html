@@ -306,13 +306,14 @@
                     <p><strong>URLs:</strong> ${conv.urls.join(', ') || 'None'}</p>
                     <p><strong>Files:</strong> ${conv.files.join(', ') || 'None'}</p>
                     <p><strong>Uploaded Files:</strong> ${Object.values(conv.ready_files).join(', ') || 'None'}</p>
-                    <button class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-file-import"><button>
-                    <button class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-share-from-square"><button>
-                    <button class="bg-red-500 text-white rounded p-2 text-xl fa-solid fa-trash-can"><button>
+                    <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-file-import"><button>
+                    <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-share-from-square"><button>
+                    <button class="bg-red-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-trash-can"><button>
                 `;
                 item.querySelector('button.fa-file-import').addEventListener('click', () => {
                     currentConversationId = conv.id;
                     document.getElementById('conversations-modal').classList.add('hidden');
+                    clearMessageFromChat();
                     loadConversation(conv.id);
                 });
                 item.querySelector('button.fa-share-from-square').addEventListener('click', (e) => {
@@ -360,7 +361,6 @@
                 throw new Error('Failed to load conversation');
             }
             const data = await response.json();
-            clearMessageFromChat();
             
             data.forEach(msg => {
                 const content = msg.parts.map(function(part){
@@ -419,7 +419,9 @@
             if (!response.ok) {
                 throw new Error('Failed to load conversation markdown');
             }
-            document.getElementById('markdown').value = await response.text();
+            
+            const mobile_friendly = '<style>img { width: 95vw; } video { width: 90vw; } </style>\n\n'
+            document.getElementById('markdown').value = mobile_friendly + await response.text();
         }
 
         function applySettings(){
@@ -478,6 +480,7 @@
 
             try {
                 if (!currentConversationId) {
+                    clearMessageFromChat();
                     currentConversationId = await createConversation(files, urls);
                 }
 
