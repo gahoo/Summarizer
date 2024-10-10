@@ -101,7 +101,7 @@ def download_captions(url, cookies_file=None, language=None, convert_to_txt=Fals
             audio_file = download_youtube_audio(url, ydl, safe_title)
             if not transcribe:
                 return audio_file
-            elif info.get('duration') <= 7200 and is_file_size_within_limit(audio_file, 25 * 1024 * 1024):
+            elif info.get('duration', 0) <= 7200 and is_file_size_within_limit(audio_file, 25 * 1024 * 1024):
                 caption_file = groq_transcribe(audio_file, language)
             else:
                 caption_file = whisper_asr_transcribe(audio_file, language=language)
@@ -132,6 +132,9 @@ def download_youtube_audio(url, ydl, safe_title):
     elif 'x.com' in url or 'twitter.com' in url:
         ydl.format_selector = ydl.build_format_selector('hls-audio-32000-Audio')
         ext = 'mp4'
+    elif 'bilibili.com' in url:
+        ydl.format_selector = ydl.build_format_selector('30216')
+        ext = 'm4a'
     ydl.params['skip_download'] = False
     ydl.download([url])
     audio_file = f"{safe_title}.{ext}"
