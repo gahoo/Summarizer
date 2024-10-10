@@ -158,6 +158,10 @@ def index():
 def manifest():
     return send_file('statics/manifest.json')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_file('statics/favicon.ico')
+
 @app.route('/statics/<filename>')
 def statics(filename):
     return send_from_directory('statics/', filename)
