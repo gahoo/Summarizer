@@ -142,9 +142,12 @@ class GeminiSummarizer(Base):
     def scrape(self, urls, scraper='jina', **kwargs):
         scraped_files = [self.url2file(url, scraper=scraper, **kwargs) for url in urls]
         return self.upload(scraped_files)
+    
+    def is_video_url(self, url):
+        return any(list(map(lambda x: x in url, ['youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'www.bilibili.com/video'])))
 
     def url2file(self, url, **kwargs):
-        if 'youtube.com' in url or 'youtu.be' in url or 'x.com' in url or 'twitter.com' in url:
+        if self.is_video_url(url):
             return download_captions(url, kwargs.get('cookies', kwargs.get('cookies')), 
                                      convert_to_txt=kwargs.get('srt_to_txt', kwargs.get('srt_to_txt')), 
                                      transcribe=kwargs.get('transcribe', kwargs.get('transcribe', True)))
@@ -224,9 +227,9 @@ class GeminiSummarizer(Base):
         def format_part_markdown(part, prefix):
             if 'file_data' in part:
                 if self.uri2path:
-                    return os.path.basename(self.uri2path[part['file_data']['file_uri']])
+                    return '# ' + os.path.basename(self.uri2path[part['file_data']['file_uri']])
                 else:
-                    return part['file_data']['file_uri']
+                    return '# ' + part['file_data']['file_uri']
             else:
                 if isinstance(part, str):
                     return prefix + part
