@@ -153,7 +153,8 @@
         };
 
         const commonPrompts = [
-            "请将这些图片中的文字提取出来。",
+            "请将这些图片中的文字提取出来，只整理格式以及修正错别字，不要修改文字内容。",
+            "请将这些图片中的文字提取出来，并总结主要内容。",
             "请总结这篇文章的主要内容。",
             "请总结这篇论文的主要内容与发现。",
             "请根据视频字幕总结主持人的主要观点",
@@ -480,7 +481,6 @@
 
             try {
                 if (!currentConversationId) {
-                    clearMessageFromChat();
                     currentConversationId = await createConversation(files, urls);
                 }
 
