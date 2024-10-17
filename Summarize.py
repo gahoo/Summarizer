@@ -144,7 +144,7 @@ class GeminiSummarizer(Base):
         return self.upload(scraped_files)
     
     def is_video_url(self, url):
-        return any(list(map(lambda x: x in url, ['youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'www.bilibili.com/video'])))
+        return any(list(map(lambda x: x in url, ['youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'www.bilibili.com/video', '.webm', '.mp4', '.m4a'])))
 
     def url2file(self, url, **kwargs):
         if self.is_video_url(url):
