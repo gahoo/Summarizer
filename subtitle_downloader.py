@@ -8,23 +8,12 @@ import functools
 from dotenv import load_dotenv
 from groq import Groq
 from scraper import download_path
+from utils import undo_proxy
+from utils import set_proxy
 
 load_dotenv()
 GROQ_API_KEY=os.getenv('GROQ_API_KEY')
 WHISPER_ASR_API_URL = os.getenv('WHISPER_ASR_API_URL')
-
-def undo_proxy(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        http_proxy = os.environ.pop('http_proxy', None)
-        https_proxy = os.environ.pop('https_proxy', None)
-
-        result = func(*args, **kwargs)
-
-        os.environ['http_proxy'] = http_proxy
-        os.environ['https_proxy'] = https_proxy
-        return result
-    return wrapper
 
 def get_best_subtitle_language(subtitles):
     preferred_languages = ['en', 'zh', 'zh-Hans', 'zh-Hant', 'zh-TW', 'en-US', 'en-GB']  # 添加更多语言代码
@@ -72,6 +61,7 @@ def srt_to_txt(srt_file_path, txt_file_path):
 
     print(f"转换完成。文本已保存到 {txt_file_path}")
 
+@set_proxy('YOUTUBE_PROXY')
 def download_captions(url, cookies_file=None, language=None, convert_to_txt=False, transcribe=True):
     ydl_opts = {
         'skip_download': True,

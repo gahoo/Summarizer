@@ -7,7 +7,6 @@ import hashlib
 import argparse
 import pdb
 import atexit
-import functools
 from pathlib import Path
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from scraper import firecrawl, jina, magic_markdownify, readability_markdownify, download_pdf, download_file, extract_markdown_images, write_flie
@@ -17,29 +16,11 @@ from sqlalchemy import create_engine, Column, String, DateTime, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from utils import set_proxy
 
 Base = declarative_base()
 ENGINES = {v: create_engine(f'sqlite:///db/{v}.db') for v in tokens.values()}
 ENGINES["summarizer"] = create_engine("sqlite:///db/summarizer.db") # fallback
-
-def set_gemini_proxy(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        GEMINI_PROXY = os.getenv('GEMINI_PROXY', '')
-        if GEMINI_PROXY:
-            http_proxy = os.environ.pop('http_proxy', '')
-            https_proxy = os.environ.pop('https_proxy', '')
-
-            os.environ['http_proxy'] = os.getenv('GEMINI_PROXY', '')
-            os.environ['https_proxy'] = os.getenv('GEMINI_PROXY', '')
-
-        result = func(*args, **kwargs)
-
-        if GEMINI_PROXY:
-            os.environ['http_proxy'] = http_proxy
-            os.environ['https_proxy'] = https_proxy
-        return result
-    return wrapper
 
 class GeminiSummarizer(Base):
     __tablename__ = 'conversations'
@@ -123,7 +104,7 @@ class GeminiSummarizer(Base):
             image_files = [download_file(url) for url in image_urls]
             self.ready_files.extend(self.upload(image_files))
 
-    @set_gemini_proxy
+    @set_proxy('GEMINI_PROXY')
     def upload(self, files):
         uploaded_files = []
         for file in files:
@@ -166,7 +147,7 @@ class GeminiSummarizer(Base):
         elif scraper == 'readability_markdownify':
             return readability_markdownify(url)
 
-    @set_gemini_proxy
+    @set_proxy('GEMINI_PROXY')
     def wait_for_files_active(self, files):
         ready_files = []
         print("Waiting for file processing...")
@@ -188,7 +169,7 @@ class GeminiSummarizer(Base):
             history.append({"role": "user", "parts": ready_files})
         self.chat = self.model.start_chat(history=history)
 
-    @set_gemini_proxy
+    @set_proxy('GEMINI_PROXY')
     def send(self, message):
         response = self.chat.send_message(message)
         return response.text
