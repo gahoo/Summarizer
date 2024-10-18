@@ -4,8 +4,8 @@ import os
 def set_proxy(func, proxy_env='GEMINI_PROXY'):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        proxy_env = os.getenv(proxy_env, '')
-        if proxy_env:
+        proxy = os.getenv(proxy_env, '')
+        if proxy:
             http_proxy = os.environ.pop('http_proxy', '')
             https_proxy = os.environ.pop('https_proxy', '')
 
@@ -14,7 +14,7 @@ def set_proxy(func, proxy_env='GEMINI_PROXY'):
 
         result = func(*args, **kwargs)
 
-        if proxy_env:
+        if proxy:
             os.environ['http_proxy'] = http_proxy
             os.environ['https_proxy'] = https_proxy
         return result
