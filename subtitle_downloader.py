@@ -130,6 +130,7 @@ def download_youtube_audio(url, ydl, safe_title):
     audio_file = f"{safe_title}.{ext}"
     return audio_file
 
+@undo_proxy
 def groq_transcribe(audio_file, language):
     client = Groq(api_key=GROQ_API_KEY)
     print(f"使用Groq进行语音识别: {audio_file}")
