@@ -108,7 +108,7 @@ def download_file(url):
 
         total_size = int(response.headers.get('content-length', 0))
 
-        if local_file_size == total_size:
+        if local_file_size == total_size and os.path.exists(filename):
             print(f"File already downloaded completely: {filename}")
             return filename
 
