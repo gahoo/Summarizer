@@ -121,6 +121,8 @@ def download_youtube_audio(url, ydl, safe_title):
         ext = 'm4a'
     elif 'x.com' in url or 'twitter.com' in url:
         ydl.format_selector = ydl.build_format_selector('hls-audio-32000-Audio')
+        safe_title = safe_title[:80]
+        ydl.params['outtmpl']['default'] = f'{safe_title}.%(ext)s'
         ext = 'mp4'
     elif 'bilibili.com' in url:
         ydl.format_selector = ydl.build_format_selector('30216')
