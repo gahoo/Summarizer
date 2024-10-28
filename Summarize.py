@@ -134,6 +134,8 @@ class GeminiSummarizer(Base):
                                      transcribe=kwargs.get('transcribe', kwargs.get('transcribe', True)))
         elif '.pdf' in url:
             return download_pdf(url, kwargs.get('pdf_to_markdown'))
+        elif '.txt' in url:
+            return download_file(url)
         else:
             return self.url2markdown(url, **kwargs)
 
