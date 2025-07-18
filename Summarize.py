@@ -112,6 +112,8 @@ class GeminiSummarizer(Base):
             mime_type = mime.from_file(file)
             if mime_type == 'application/x-subrip':
                 mime_type = 'text/plain'
+            elif mime_type == 'application/javascript':
+                mime_type = 'text/plain'
             print(f"Uploading file '{file}' as {mime_type}...")
             uploaded_file = genai.upload_file(file, mime_type=mime_type, display_name=file)
             print(f"Uploaded file '{uploaded_file.display_name}' as: {uploaded_file.uri}")
@@ -125,16 +127,17 @@ class GeminiSummarizer(Base):
         return self.upload(scraped_files)
     
     def is_video_url(self, url):
-        return any(list(map(lambda x: x in url, ['youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'www.bilibili.com/video', '.webm', '.mp4', '.m4a'])))
+        return any(list(map(lambda x: x in url, ['youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'www.bilibili.com/video', 'b23.tv', '.webm', '.mp4', '.m4a'])))
 
     def url2file(self, url, **kwargs):
         if self.is_video_url(url):
+            print(url)
             return download_captions(url, kwargs.get('cookies', kwargs.get('cookies')), 
                                      convert_to_txt=kwargs.get('srt_to_txt', kwargs.get('srt_to_txt')), 
                                      transcribe=kwargs.get('transcribe', kwargs.get('transcribe', True)))
         elif '.pdf' in url:
             return download_pdf(url, kwargs.get('pdf_to_markdown'))
-        elif '.txt' in url:
+        elif '.txt' in url or '.js' in url:
             return download_file(url)
         else:
             return self.url2markdown(url, **kwargs)

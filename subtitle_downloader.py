@@ -78,6 +78,8 @@ def download_captions(url, cookies_file=None, language=None, convert_to_txt=Fals
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         safe_title = download_path("".join([c for c in info['title'] if c.isalpha() or c.isdigit() or c==' ']).rstrip())
+        if len(safe_title) > 80:
+            safe_title = safe_title[:80]
         ydl.params['outtmpl']['default'] = f'{safe_title}.%(ext)s'
         if info.get('subtitles') and 'live_chat' not in info.get('subtitles'):
             if not language:
@@ -124,7 +126,7 @@ def download_youtube_audio(url, ydl, safe_title):
         safe_title = safe_title[:80]
         ydl.params['outtmpl']['default'] = f'{safe_title}.%(ext)s'
         ext = 'mp4'
-    elif 'bilibili.com' in url:
+    elif 'bilibili.com' in url or 'b23.tv' in url:
         ydl.format_selector = ydl.build_format_selector('30216')
         ext = 'm4a'
     ydl.params['skip_download'] = False
