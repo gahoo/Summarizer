@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Summarize
 // @namespace    http://tampermonkey.net/
-// @version      1.14
+// @version      1.15
 // @description  Add a button to YouTube videos to summarize them with Gemini.
 // @author       You
 // @match        https://www.youtube.com/*
@@ -717,10 +717,26 @@
         sendButton.onclick = async () => {
             const message = input.value;
             if (!message) return;
+
+            sendButton.classList.add('gemini-breathing');
+            sendButton.disabled = true;
+            input.disabled = true;
+
             input.value = '';
             addMessageToChat(chatHistory, 'user', message);
-            const response = await GeminiAPI.sendMessage(conversationId, message);
-            addMessageToChat(chatHistory, 'assistant', response.response);
+            try {
+                const response = await GeminiAPI.sendMessage(conversationId, message);
+                addMessageToChat(chatHistory, 'assistant', response.response);
+            } catch (e) {
+                console.error('Error sending message:', e);
+                addMessageToChat(chatHistory, 'assistant', 'Sorry, an error occurred while sending the message.');
+                input.value = message; // Restore input if sending failed
+            } finally {
+                sendButton.classList.remove('gemini-breathing');
+                sendButton.disabled = false;
+                input.disabled = false;
+                input.focus();
+            }
         };
 
         input.addEventListener('keydown', (e) => {
@@ -782,8 +798,15 @@
                 0%, 100% { transform: translateY(0); }
                 50% { transform: translateY(-5px); }
             }
+            @keyframes gemini-breathing {
+                0%, 100% { background-color: #0f0f0f; }
+                50% { background-color: #0f0f0fa1; }
+            }
             .gemini-bounce {
                 animation: gemini-bounce 0.5s ease-in-out infinite;
+            }
+            .gemini-breathing {
+                animation: gemini-breathing 1.5s ease-in-out infinite;
             }
             #gemini-conversation-list-modal, #gemini-chat-modal {
                 display: none;
