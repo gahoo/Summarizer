@@ -19,6 +19,7 @@
     const PASTEBIN_URL = 'https://shz.al/';
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
     const GEMINI_MODEL = "gemini-1.5-flash-latest";
+    const OBSIDIAN_FOLDER = "";
 
     const conversations = []; // To store conversation status
     let markdownPolicy; // To hold the Trusted Types policy
@@ -46,7 +47,7 @@
                 obsidianUrl = `obsidian://daily?`;
             } else {
                 const formattedNoteName = noteName.replace(/[\\/:"*?<>|]/g, '-');
-                obsidianUrl = `obsidian://new?file=${encodeURIComponent(formattedNoteName)}`;
+                obsidianUrl = `obsidian://new?file=${OBSIDIAN_FOLDER}${encodeURIComponent(formattedNoteName)}`;
             }
 
             obsidianUrl += `&content=${encodeURIComponent(fileContent)}`;
@@ -54,7 +55,7 @@
                 obsidianUrl += `&vault=${encodeURIComponent(vault)}`;
             }
 
-            window.open(obsidianUrl, '_blank');
+            window.open(obsidianUrl, '_top');
         }
     };
 
@@ -449,16 +450,22 @@
             .then(data => {
                 const conversationId = data.conversation_id;
                 conversationEntry.id = conversationId;
-                // Chain the next API call
-                return GeminiAPI.sendMessage(conversationId, defaultPrompt)
-                    .then(() => {
-                        // Final success state
-                        conversationEntry.status = 'success';
-                        updateUIForConversation(conversationEntry);
-                    });
+                return GeminiAPI.getConversation(conversationId);
+            })
+            .then(conversationHistory => {
+                if (conversationHistory.length > 2) {
+                    return Promise.resolve(); // Skip sending message
+                } else {
+                    return GeminiAPI.sendMessage(conversationEntry.id, defaultPrompt);
+                }
+            })
+            .then(() => {
+                // This will run for both cases (skipped or sent message)
+                conversationEntry.status = 'success';
+                updateUIForConversation(conversationEntry);
             })
             .catch(error => {
-                // Catches errors from either createConversation or sendMessage
+                // Catches errors from any of the steps
                 console.error('Error during conversation processing:', error);
                 conversationEntry.status = 'error';
                 updateUIForConversation(conversationEntry);
@@ -470,16 +477,29 @@
     }
 
     function addSummarizeButton(videoElement) {
-        if (videoElement.querySelector('.gemini-summarize-button')) {
-            return; // Button already exists
+        const videoUrl = getVideoUrl(videoElement);
+        if (!videoUrl) return;
+
+        const existingButton = videoElement.querySelector('.gemini-summarize-button');
+        if (existingButton) {
+            if (existingButton.dataset.url === videoUrl) {
+                // Correct button already exists, just ensure state is synced
+                const conversation = conversations.find(c => c.url === videoUrl);
+                if (conversation) {
+                    conversation.ui.button = existingButton; // Re-associate
+                    updateUIForConversation(conversation);
+                }
+                return;
+            } else {
+                // Stale button from recycled element, remove it
+                existingButton.remove();
+            }
         }
 
         const button = UI.createSummarizeButton();
-        const videoUrl = getVideoUrl(videoElement);
+        button.dataset.url = videoUrl; // Store URL on the button
         const videoTitle = getVideoTitle(videoElement);
 
-
-        if (!videoUrl) return;
 
         button.addEventListener('click', (e) => {
             e.preventDefault();
