@@ -748,7 +748,21 @@
 
         exportButton.onclick = async () => {
             const markdown = await GeminiAPI.getConversationMarkdown(conversationId);
-            obsidianUtils.saveToObsidian(markdown, conv ? conv.title : 'YouTube Summary');
+            const title = conv ? conv.title : 'YouTube Summary';
+            const source = conv ? conv.url : '';
+            const created = new Date().toISOString().slice(0, 10);
+
+            const frontmatter = `---
+title: "${title.replace(/"/g, '\"')}"
+source: "${source}"
+created: ${created}
+tags:
+  - "YouTube"
+---
+
+`;
+            const fileContent = frontmatter + markdown;
+            obsidianUtils.saveToObsidian(fileContent, title);
         };
 
         exportPastebinButton.onclick = async () => {
