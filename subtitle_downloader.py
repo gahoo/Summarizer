@@ -65,6 +65,8 @@ def srt_to_txt(srt_file_path, txt_file_path):
 def download_captions(url, cookies_file=None, language=None, convert_to_txt=False, transcribe=True):
     ydl_opts = {
         'skip_download': True,
+        'noplaylist': True,
+        'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
         'postprocessors': [{
             'format': 'srt',
             'key': 'FFmpegSubtitlesConvertor',
