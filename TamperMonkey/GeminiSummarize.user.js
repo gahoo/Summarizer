@@ -266,15 +266,24 @@
 
     // --- API ---
     class GeminiAPI {
-        static createConversation(url) {
+        static createConversation(url, with_cookies = false) {
             return new Promise((resolve, reject) => {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_KEY}`
+                };
+
+                if (with_cookies) {
+                    const cookies = document.cookie;
+                    if (cookies) {
+                        headers['yt-cookies'] = btoa(cookies);
+                    }
+                }
+
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: `${BASE_URL}/conversations`,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_KEY}`
-                    },
+                    headers: headers,
                     data: JSON.stringify({ urls: [url] , model: GEMINI_MODEL}),
                     onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
@@ -443,12 +452,13 @@
         }
 
 
+        const with_cookies = conversationEntry.status === 'error';
         conversationEntry.status = 'loading';
         updateUIForConversation(conversationEntry);
 
         const defaultPrompt = '请根据视频字幕总结主持人的主要观点';
 
-        GeminiAPI.createConversation(url)
+        GeminiAPI.createConversation(url, with_cookies)
             .then(data => {
                 const conversationId = data.conversation_id;
                 conversationEntry.id = conversationId;
