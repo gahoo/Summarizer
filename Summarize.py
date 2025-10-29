@@ -32,7 +32,7 @@ class GeminiSummarizer(Base):
     files = Column(Text)
     urls = Column(Text)
 
-    def __init__(self, model="models/gemini-1.5-flash", id=None, files=[], urls=[], db='summarizer', overwrite=False, **kwargs):
+    def __init__(self, model="models/gemini-2.5-flash", id=None, files=[], urls=[], db='summarizer', overwrite=False, **kwargs):
         super().__init__()
         self.model = genai.GenerativeModel(
             model_name=model,
@@ -316,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--urls', nargs="*", help='url to download.', default=[])
     parser.add_argument("--cookies", help="cookies file path")
     parser.add_argument('--prompt', help='prompt', default="请根据视频字幕总结主持人的主要观点")
-    parser.add_argument('--model', help='model', default="models/gemini-1.5-flash")
+    parser.add_argument('--model', help='model', default="models/gemini-2.5-flash")
     parser.add_argument('--srt_to_txt', help='convert srt to txt', action='store_true', default=False)
     parser.add_argument('--question', help='ask question after summarize', action='store_true', default=False)
     parser.add_argument('--load_history', dest='id', help='load history from db', default=None)
