@@ -300,7 +300,9 @@
                         if (response.status >= 200 && response.status < 300) {
                             resolve(JSON.parse(response.responseText));
                         } else {
-                            reject(new Error(response.statusText));
+                            const error = new Error(response.statusText);
+                            error.status = response.status;
+                            reject(error);
                         }
                     },
                     onerror: (error) => reject(error)
@@ -676,8 +678,21 @@
         modal.style.display = 'block';
         shareUrlContainer.style.display = 'none'; // Hide on open
 
-        const conversation = await GeminiAPI.getConversation(conversationId);
-        chatHistory.textContent = ''; // Clear "Loading..."
+        let conversation = [];
+        try {
+            conversation = await GeminiAPI.getConversation(conversationId);
+            chatHistory.textContent = ''; // Clear "Loading..."
+        } catch (error) {
+            chatHistory.textContent = 'Failed to load conversation.';
+            if (error.status === 404) {
+                const conv = conversations.find(c => c.id === conversationId);
+                if (conv) {
+                    conv.status = 'error';
+                    updateUIForConversation(conv);
+                }
+            }
+        }
+
         conversation.forEach(msg => {
             const messageContent = msg.parts.filter(part => typeof part === 'string').join(' ');
             if (messageContent.trim() !== '') {
@@ -752,13 +767,7 @@
             const source = conv ? conv.url : '';
             const created = new Date().toISOString().slice(0, 10);
 
-            const frontmatter = `---
-title: "${title.replace(/"/g, '\"')}"
-source: "${source}"
-created: ${created}
-tags:
-  - "YouTube"
----
+            const frontmatter = `---\ntitle: "${title.replace(/"/g, '\\"')}"\nsource: "${source}"\ncreated: ${created}\ntags:\n  - \"YouTube\"\n---
 
 `;
             const fileContent = frontmatter + markdown;
