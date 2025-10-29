@@ -18,7 +18,7 @@
     const BASE_URL = 'http://localhost:5000'; // Replace with your actual base URL
     const PASTEBIN_URL = 'https://shz.al/';
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
-    const GEMINI_MODEL = "gemini-1.5-flash-latest";
+    const GEMINI_MODEL = "gemini-2.5-flash-latest";
     const OBSIDIAN_FOLDER = "";
 
     const conversations = []; // To store conversation status
@@ -545,7 +545,10 @@
         if ((element.tagName == 'YTM-SLIM-VIDEO-ACTION-BAR-RENDERER' || element.tagName == 'YTD-WATCH-METADATA') && window.location.pathname === '/watch') {
             return window.location.href;
         }
-        let anchor = element.querySelector('a#yt-lockup-metadata-view-model-wiz__title') || element.querySelector('a#thumbnail') || element.querySelector('a#video-title') || element.querySelector('a.compact-media-item-metadata-content') || element.querySelector('a.media-item-thumbnail-container') || element.querySelector('a');
+        if (element.classList[0] == 'ytp-videowall-still') {
+            return element.href
+        }
+        let anchor = element.querySelector('a#yt-lockup-metadata-view-model-wiz__title') || element.querySelector('a#thumbnail') || element.querySelector('a#video-title') || element.querySelector('a.compact-media-item-metadata-content') || element.querySelector('a.media-item-thumbnail-container') || element.querySelector('a.ytp-videowall-still') || element.querySelector('a');
         return anchor && anchor.href ? new URL(anchor.href).href : null;
     }
 
@@ -553,14 +556,14 @@
         if ((element.tagName == 'YTM-SLIM-VIDEO-ACTION-BAR-RENDERER' || element.tagName == 'YTD-WATCH-METADATA') && window.location.pathname === '/watch') {
             return document.title;
         }
-        let titleElement = element.querySelector('h3.title-and-badge') || element.querySelector('h4.compact-media-item-headline') || element.querySelector('#video-title') || element.querySelector('h3.yt-lockup-metadata-view-model-wiz__heading-reset') || element.querySelector('h3.yt-lockup-metadata-view-model__heading-reset'); 
+        let titleElement = element.querySelector('h3.title-and-badge') || element.querySelector('h4.compact-media-item-headline') || element.querySelector('#video-title') || element.querySelector('h3.yt-lockup-metadata-view-model-wiz__heading-reset') || element.querySelector('h3.yt-lockup-metadata-view-model__heading-reset') || element.querySelector('span.ytp-videowall-still-info-title');
         return titleElement ? titleElement.textContent.trim() : 'Unknown Title';
     }
 
 
     function findInsertionPoint(element) {
         // Desktop
-        let target = element.querySelector('#menu') || element.querySelector('.yt-spec-button-view-model') || element.querySelector('.yt-lockup-metadata-view-model-wiz__menu-button') || element.querySelector('ytm-bottom-sheet-renderer') || element.querySelector('button-view-model') || element.querySelector('.yt-lockup-metadata-view-model__menu-button');
+        let target = element.querySelector('#menu') || element.querySelector('.yt-spec-button-view-model') || element.querySelector('.yt-lockup-metadata-view-model-wiz__menu-button') || element.querySelector('ytm-bottom-sheet-renderer') || element.querySelector('button-view-model') || element.querySelector('.yt-lockup-metadata-view-model__menu-button') || element.querySelector('.ytp-videowall-still-info-title');
         if (target) return target;
 
         // Mobile
@@ -588,7 +591,8 @@
         'ytm-rich-item-renderer', 'ytm-compact-video-renderer',
         'ytm-playlist-video-renderer', 'ytd-watch-metadata',
         'ytm-slim-video-action-bar-renderer', 'yt-lockup-view-model',
-        'ytm-rich-item-renderer', 'ytm-video-with-context-renderer'
+        'ytm-rich-item-renderer', 'ytm-video-with-context-renderer',
+        'a.ytp-videowall-still'
     ];
     const videoSelectorString = videoSelectors.join(', ');
 
@@ -683,6 +687,7 @@
             conversation = await GeminiAPI.getConversation(conversationId);
             chatHistory.textContent = ''; // Clear "Loading..."
         } catch (error) {
+            console.error('Error opening chat modal:', error);
             chatHistory.textContent = 'Failed to load conversation.';
             if (error.status === 404) {
                 const conv = conversations.find(c => c.id === conversationId);
@@ -692,7 +697,6 @@
                 }
             }
         }
-
         conversation.forEach(msg => {
             const messageContent = msg.parts.filter(part => typeof part === 'string').join(' ');
             if (messageContent.trim() !== '') {
@@ -767,11 +771,17 @@
             const source = conv ? conv.url : '';
             const created = new Date().toISOString().slice(0, 10);
 
-            const frontmatter = `---\ntitle: "${title.replace(/"/g, '\\"')}"\nsource: "${source}"\ncreated: ${created}\ntags:\n  - \"YouTube\"\n---
+            const frontmatter = `---
+title: "${title.replace(/"/g, '\"')}"
+source: "${source}"
+created: ${created}
+tags:
+  - "YouTube"
+---
 
 `;
             const fileContent = frontmatter + markdown;
-            obsidianUtils.saveToObsidian(fileContent, title);
+            obsidianUtils.saveToObsidian(fileContent, conv ? conv.title : 'YouTube Summary');
         };
 
         exportPastebinButton.onclick = async () => {
@@ -822,14 +832,14 @@
                 50% { transform: translateY(-5px); }
             }
             @keyframes gemini-breathing {
-                0%, 100% { background-color: #0f0f0f; }
-                50% { background-color: #0f0f0fa1; }
+                from { background-color: #0f0f0f; }
+                to { background-color: #0f0f0fa1; }
             }
             .gemini-bounce {
                 animation: gemini-bounce 0.5s ease-in-out infinite;
             }
             .gemini-breathing {
-                animation: gemini-breathing 1.5s ease-in-out infinite;
+                animation: gemini-breathing 1.5s ease-in-out infinite alternate;
             }
             #gemini-conversation-list-modal, #gemini-chat-modal {
                 display: none;
