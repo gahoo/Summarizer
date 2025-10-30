@@ -1,22 +1,35 @@
-FROM python:3.9.20-slim-bookworm
+FROM python:3.14.0-slim-bookworm as builder
 
 RUN apt update && \
-    apt install -y libmagic-dev unzip wget xz-utils && \
-    wget https://github.com/gahoo/Summarizer/archive/refs/heads/master.zip && \
+    apt install -y zlib1g-dev libxml2-dev libxslt1-dev build-essential
+RUN pip install https://github.com/opendatalab/magic-html/releases/download/magic_html-0.1.5-released/magic_html-0.1.5-py3-none-any.whl
+RUN pip install pyuwsgi
+
+FROM python:3.14.0-slim-bookworm
+
+RUN apt update && \
+    apt install -y unzip wget xz-utils libxml2 zlib1g libxslt1.1 libmagic-dev
+
+RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz && \
+    tar -xf ffmpeg-release-arm64-static.tar.xz && \
+    cp ffmpeg-7.0.2-arm64-static/ffmpeg /usr/local/bin/ && \
+    rm -r ffmpeg-release-arm64-static.tar.xz ffmpeg-7.0.2-arm64-static/
+
+COPY --from=builder /usr/local/lib/python3.14/site-packages/ \
+                    /usr/local/lib/python3.14/site-packages/
+
+COPY --from=builder /usr/local/bin/ \
+                    /usr/local/bin/
+
+RUN wget https://github.com/gahoo/Summarizer/archive/refs/heads/master.zip && \
     unzip master && \
     rm master.zip && \
     mv Summarizer-master Summarizer && \
     cd Summarizer && \
     mv tokens.py.example tokens.py && \
-    pip install https://github.com/opendatalab/magic-html/releases/download/magic_html-0.1.2-released/magic_html-0.1.2-py3-none-any.whl -r requirements.txt && \
-    sed '278s#www.youtube.com#siteproxy.42bio.info/fxxkgfw/https/www.youtube.com#g' /usr/local/lib/python3.9/site-packages/yt_dlp/extractor/youtube.py -i
-
-RUN pip install pyuwsgi
-
-RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz && \
-    tar -xf ffmpeg-release-amd64-static.tar.xz && \
-    cp ffmpeg-7.0.2-amd64-static/ffmpeg /usr/local/bin/ && \
-    rm -r ffmpeg-release-amd64-static.tar.xz ffmpeg-7.0.2-amd64-static/
+    mkdir db && \
+    pip install -r requirements.txt && \
+    chown -R 1000:1000 /Summarizer
 
 RUN useradd summarizer
 
@@ -27,5 +40,6 @@ WORKDIR /Summarizer
 ENV PORT 5000
 ENV WORKERS 1
 ENV THREADS 4
+ENV BUFFER_SIZE 32768
 
-CMD uwsgi --http :${PORT} --master -p ${WORKERS} --threads ${THREADS} -w app:app
+CMD uwsgi --http :${PORT} --master -p ${WORKERS} --threads ${THREADS} -b ${BUFFER_SIZE} -w app:app
