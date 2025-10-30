@@ -9,4 +9,4 @@ python-magic
 readability-lxml==0.8.1
 requests==2.32.2
 SQLAlchemy==2.0.32
-yt-dlp==2024.5.27
+yt-dlp==2025.10.22
