@@ -21,6 +21,7 @@
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
     const GEMINI_MODEL = "gemini-2.5-flash-latest";
     const OBSIDIAN_FOLDER = "";
+    const USE_COOKIE_WHEN_ERROR = false; // Experimental feature that only works with TamperMonkey Beta
 
     const conversations = []; // To store conversation status
     let markdownPolicy; // To hold the Trusted Types policy
@@ -299,7 +300,7 @@
                 'Authorization': `Bearer ${API_KEY}`
             };
 
-            if (with_cookies) {
+            if (USE_COOKIE_WHEN_ERROR && with_cookies) {
                 try {
                     const allCookies = await GM.cookie.list({ url: window.location.href });
                     const requiredCookieNames = [
@@ -345,6 +346,28 @@
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url: `${BASE_URL}/conversations/${conversationId}/json`,
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            resolve(JSON.parse(response.responseText));
+                        } else {
+                            const error = new Error(response.statusText);
+                            error.status = response.status;
+                            reject(error);
+                        }
+                    },
+                    onerror: (error) => reject(error)
+                });
+            });
+        }
+
+        static saveConversation(conversationId) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'PUT',
+                    url: `${BASE_URL}/conversations/${conversationId}`,
                     headers: {
                         'Authorization': `Bearer ${API_KEY}`
                     },
@@ -518,6 +541,7 @@
                 // This will run for both cases (skipped or sent message)
                 conversationEntry.status = 'success';
                 updateUIForConversation(conversationEntry);
+                GeminiAPI.saveConversation(conversationEntry.id);
             })
             .catch(error => {
                 // Catches errors from any of the steps
@@ -799,6 +823,7 @@
             try {
                 const response = await GeminiAPI.sendMessage(conversationId, message);
                 addMessageToChat(chatHistory, 'assistant', response.response);
+                GeminiAPI.saveConversation(conversationId);
             } catch (e) {
                 console.error('Error sending message:', e);
                 addMessageToChat(chatHistory, 'assistant', 'Sorry, an error occurred while sending the message.');
