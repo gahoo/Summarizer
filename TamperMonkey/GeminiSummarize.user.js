@@ -22,8 +22,10 @@
     const BASE_URL = 'http://localhost:5000'; // Replace with your actual base URL
     const PASTEBIN_URL = 'https://shz.al/';
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
-    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.0-flash-preview"];
+    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-3-pro-preview", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
     const QUOTA_PER_MODEL = 20;
+    const FAILURE_THRESHOLD = 3;
+    const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
     const OBSIDIAN_FOLDER = "";
     const USE_COOKIE_WHEN_ERROR = false; // Experimental feature that only works with TamperMonkey Beta
 
@@ -43,13 +45,66 @@
         saveUsage(usage) {
             GM_setValue('gemini_usage', usage);
         },
+        resetQuota() {
+            GM_deleteValue('gemini_usage');
+            GM_deleteValue('gemini_model_failures');
+            console.log('GeminiSummarize: Quota and failures manually reset.');
+        },
+        getFailureStorage() {
+            return GM_getValue('gemini_model_failures', {});
+        },
+        saveFailureStorage(failures) {
+            GM_setValue('gemini_model_failures', failures);
+        },
+        reportFailure(model) {
+            const failures = this.getFailureStorage();
+            const now = Date.now();
+            const record = failures[model] || { count: 0, lastFailure: 0 };
+
+            // If last failure was long ago, reset count first
+            if (now - record.lastFailure > COOLDOWN_MS) {
+                record.count = 0;
+            }
+
+            record.count += 1;
+            record.lastFailure = now;
+            failures[model] = record;
+
+            this.saveFailureStorage(failures);
+            console.log(`GeminiSummarize: Reported failure for ${model}. Count: ${record.count}`);
+        },
+        resetFailure(model) {
+            const failures = this.getFailureStorage();
+            if (failures[model]) {
+                delete failures[model];
+                this.saveFailureStorage(failures);
+            }
+        },
         getAvailableModel() {
             const usage = this.getUsage();
+            const failures = this.getFailureStorage();
+            const now = Date.now();
+
             for (const model of GEMINI_MODELS) {
-                const count = usage.models[model] || 0;
-                if (count < QUOTA_PER_MODEL) {
-                    return model;
+                // Check quota
+                const quotaCount = usage.models[model] || 0;
+                if (quotaCount >= QUOTA_PER_MODEL) {
+                    continue; // Skip if quota full
                 }
+
+                // Check failure cooldown
+                if (failures[model]) {
+                    const elapsed = now - failures[model].lastFailure;
+                    // Reset count if cooldown passed
+                    if (elapsed > COOLDOWN_MS) {
+                        // We don't delete here to avoid constant writing, just ignore the count
+                    } else if (failures[model].count >= FAILURE_THRESHOLD) {
+                        console.log(`GeminiSummarize: Skipping ${model} due to too many failures (${failures[model].count}) in cooldown period.`);
+                        continue; // Skip if threshold reached within cooldown
+                    }
+                }
+
+                return model;
             }
             return null;
         },
@@ -57,11 +112,8 @@
             const usage = this.getUsage();
             usage.models[model] = (usage.models[model] || 0) + 1;
             this.saveUsage(usage);
+            this.resetFailure(model); // Clear failure on success
         },
-        resetQuota() {
-            GM_deleteValue('gemini_usage');
-            console.log('GeminiSummarize: Quota manually reset.');
-        }
     };
 
     // --- UTILS ---
@@ -498,10 +550,14 @@
                             QuotaManager.incrementUsage(model);
                             resolve(JSON.parse(response.responseText));
                         } else {
+                            QuotaManager.reportFailure(model); // Report failure
                             reject(new Error(response.statusText));
                         }
                     },
-                    onerror: (error) => reject(error)
+                    onerror: (error) => {
+                        QuotaManager.reportFailure(model); // Report failure
+                        reject(error);
+                    }
                 });
             });
         }
