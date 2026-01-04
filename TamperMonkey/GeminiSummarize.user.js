@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Summarize
 // @namespace    http://tampermonkey.net/
-// @version      1.15
+// @version      1.16
 // @description  Add a button to YouTube videos to summarize them with Gemini.
 // @author       You
 // @match        https://www.youtube.com/*
@@ -11,20 +11,58 @@
 // @grant        GM.addStyle
 // @grant        GM.cookie
 // @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     const BASE_URL = 'http://localhost:5000'; // Replace with your actual base URL
     const PASTEBIN_URL = 'https://shz.al/';
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
-    const GEMINI_MODEL = "gemini-2.5-flash-latest";
+    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.0-flash-preview"];
+    const QUOTA_PER_MODEL = 20;
     const OBSIDIAN_FOLDER = "";
     const USE_COOKIE_WHEN_ERROR = false; // Experimental feature that only works with TamperMonkey Beta
 
     const conversations = []; // To store conversation status
     let markdownPolicy; // To hold the Trusted Types policy
+
+    // --- Quota Manager ---
+    const QuotaManager = {
+        getUsage() {
+            const today = new Date().toDateString();
+            const stored = GM_getValue('gemini_usage', { date: today, models: {} });
+            if (stored.date !== today) {
+                return { date: today, models: {} };
+            }
+            return stored;
+        },
+        saveUsage(usage) {
+            GM_setValue('gemini_usage', usage);
+        },
+        getAvailableModel() {
+            const usage = this.getUsage();
+            for (const model of GEMINI_MODELS) {
+                const count = usage.models[model] || 0;
+                if (count < QUOTA_PER_MODEL) {
+                    return model;
+                }
+            }
+            return null;
+        },
+        incrementUsage(model) {
+            const usage = this.getUsage();
+            usage.models[model] = (usage.models[model] || 0) + 1;
+            this.saveUsage(usage);
+        },
+        resetQuota() {
+            GM_deleteValue('gemini_usage');
+            console.log('GeminiSummarize: Quota manually reset.');
+        }
+    };
 
     // --- UTILS ---
     function debounce(func, wait) {
@@ -77,7 +115,7 @@
         static setButtonState(button, state, conversationId = null) {
             if (!button) return;
             button.dataset.state = state;
-            if(conversationId) {
+            if (conversationId) {
                 button.dataset.conversationId = conversationId;
             }
             switch (state) {
@@ -117,13 +155,47 @@
 
             const title = document.createElement('h2');
             title.textContent = 'Conversation List';
+            title.style.marginBottom = '10px';
 
             const list = document.createElement('div');
             list.id = 'gemini-conversation-list';
 
+            const quotaInfo = document.createElement('div');
+            quotaInfo.id = 'gemini-quota-info';
+            quotaInfo.style.fontSize = '12px';
+            quotaInfo.style.color = '#606060';
+
+            const resetBtn = document.createElement('button');
+            resetBtn.textContent = 'Reset Quota';
+            resetBtn.style.fontSize = '12px';
+            resetBtn.style.padding = '2px 8px';
+            resetBtn.style.cursor = 'pointer';
+            resetBtn.style.border = '1px solid #ddd';
+            resetBtn.style.borderRadius = '4px';
+            resetBtn.style.background = 'transparent';
+            resetBtn.style.color = '#606060';
+
+            resetBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset the daily quota?')) {
+                    QuotaManager.resetQuota();
+                    UI.updateConversationList(list, conversations);
+                }
+            });
+
+            const footerContainer = document.createElement('div');
+            footerContainer.style.display = 'flex';
+            footerContainer.style.justifyContent = 'space-between';
+            footerContainer.style.alignItems = 'center';
+            footerContainer.style.marginTop = '15px';
+            footerContainer.style.paddingTop = '10px';
+            footerContainer.style.borderTop = '1px solid #eee';
+            footerContainer.appendChild(quotaInfo);
+            footerContainer.appendChild(resetBtn);
+
             modalContent.appendChild(closeButton);
             modalContent.appendChild(title);
             modalContent.appendChild(list);
+            modalContent.appendChild(footerContainer);
             modal.appendChild(modalContent);
             document.body.appendChild(modal);
 
@@ -139,6 +211,18 @@
         }
 
         static updateConversationList(listElement, conversations) {
+            const modal = listElement.closest('#gemini-conversation-list-modal');
+            if (modal) {
+                const quotaInfo = modal.querySelector('#gemini-quota-info');
+                if (quotaInfo) {
+                    const usage = QuotaManager.getUsage();
+                    let text = 'Daily Quota Usage: ';
+                    GEMINI_MODELS.forEach(m => {
+                        text += `${m}: ${usage.models[m] || 0}/${QUOTA_PER_MODEL} | `;
+                    });
+                    quotaInfo.textContent = text.slice(0, -3);
+                }
+            }
             while (listElement.firstChild) {
                 listElement.removeChild(listElement.firstChild);
             }
@@ -257,7 +341,7 @@
             closeButton.addEventListener('click', () => {
                 modal.style.display = 'none';
             });
-             modal.addEventListener('click', (e) => {
+            modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     modal.style.display = 'none';
                 }
@@ -295,6 +379,7 @@
         }
 
         static async createConversation(url, with_cookies = false) {
+            const model = QuotaManager.getAvailableModel();
             const headers = {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${API_KEY}`
@@ -328,7 +413,7 @@
                     method: 'POST',
                     url: `${BASE_URL}/conversations`,
                     headers: headers,
-                    data: JSON.stringify({ urls: [url], model: GEMINI_MODEL }),
+                    data: JSON.stringify({ urls: [url], model: model }),
                     onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
                             resolve(JSON.parse(response.responseText));
@@ -342,7 +427,7 @@
         }
 
         static getConversation(conversationId) {
-             return new Promise((resolve, reject) => {
+            return new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url: `${BASE_URL}/conversations/${conversationId}/json`,
@@ -386,6 +471,19 @@
         }
 
         static sendMessage(conversationId, message) {
+            const model = QuotaManager.getAvailableModel();
+            if (!model) {
+                console.error('GeminiSummarize: All models have reached their daily quota.');
+                const conversationEntry = conversations.find(c => c.id === conversationId);
+                if (conversationEntry) {
+                    conversationEntry.status = 'error';
+                    updateUIForConversation(conversationEntry);
+                }
+                isProcessing = false;
+                processQueue();
+                return Promise.reject(new Error('QUOTA_EXHAUSTED'));
+            }
+
             return new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: 'POST',
@@ -397,6 +495,7 @@
                     data: JSON.stringify({ message: message }),
                     onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
+                            QuotaManager.incrementUsage(model);
                             resolve(JSON.parse(response.responseText));
                         } else {
                             reject(new Error(response.statusText));
@@ -588,7 +687,7 @@
             if (currentState === 'loading' || currentState === 'pending') return;
 
             if (currentState === 'error' || !currentState) {
-                 // Check if a conversation for this URL already exists
+                // Check if a conversation for this URL already exists
                 let conversation = conversations.find(c => c.url === videoUrl);
                 if (!conversation) {
                     conversation = {
@@ -645,13 +744,13 @@
 
         // Mobile
         target = element.querySelector('.compact-media-item-menu') || element.querySelector('ytm-menu');
-        if(target) return target;
+        if (target) return target;
 
         target = element.querySelector('ytm-slim-video-action-bar-renderer .slim-video-action-bar-actions');
-        if(target) {
+        if (target) {
             const shareButton = target.querySelector('ytm-button-renderer[button-renderer-style="SHARE_BUTTON_STYLE_TYPE_DEFAULT"]');
-            if(shareButton) {
-                 return shareButton.parentElement;
+            if (shareButton) {
+                return shareButton.parentElement;
             }
             return target;
         }
