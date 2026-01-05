@@ -22,7 +22,7 @@
     const BASE_URL = 'http://localhost:5000'; // Replace with your actual base URL
     const PASTEBIN_URL = 'https://shz.al/';
     const API_KEY = 'YOUR_API_KEY_HERE'; // <--- IMPORTANT: SET YOUR API KEY HERE
-    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-3-pro-preview", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-pro", "gemini-3-pro-preview"];
     const QUOTA_PER_MODEL = 20;
     const FAILURE_THRESHOLD = 3;
     const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -34,6 +34,8 @@
 
     // --- Quota Manager ---
     const QuotaManager = {
+        preferredModel: null, // Temporary in-memory preference
+
         getUsage() {
             const today = new Date().toDateString();
             const stored = GM_getValue('gemini_usage', { date: today, models: {} });
@@ -44,6 +46,12 @@
         },
         saveUsage(usage) {
             GM_setValue('gemini_usage', usage);
+        },
+        setPreferredModel(model) {
+            this.preferredModel = model;
+        },
+        getPreferredModel() {
+            return this.preferredModel;
         },
         resetQuota() {
             GM_deleteValue('gemini_usage');
@@ -85,6 +93,25 @@
             const failures = this.getFailureStorage();
             const now = Date.now();
 
+            // 1. Check Preferred Model
+            if (this.preferredModel) {
+                const model = this.preferredModel;
+                const quotaCount = usage.models[model] || 0;
+                let isFailed = false;
+
+                if (failures[model]) {
+                    const elapsed = now - failures[model].lastFailure;
+                    if (elapsed <= COOLDOWN_MS && failures[model].count >= FAILURE_THRESHOLD) {
+                        isFailed = true;
+                    }
+                }
+
+                if (quotaCount < QUOTA_PER_MODEL && !isFailed) {
+                    return model;
+                }
+            }
+
+            // 2. Auto-Rotation
             for (const model of GEMINI_MODELS) {
                 // Check quota
                 const quotaCount = usage.models[model] || 0;
@@ -267,12 +294,67 @@
             if (modal) {
                 const quotaInfo = modal.querySelector('#gemini-quota-info');
                 if (quotaInfo) {
+                    quotaInfo.textContent = ''; // Clear previous content
                     const usage = QuotaManager.getUsage();
-                    let text = 'Daily Quota Usage: ';
+                    const failures = QuotaManager.getFailureStorage();
+                    const now = Date.now();
+                    const preferred = QuotaManager.getPreferredModel();
+
                     GEMINI_MODELS.forEach(m => {
-                        text += `${m}: ${usage.models[m] || 0}/${QUOTA_PER_MODEL} | `;
+                        const count = usage.models[m] || 0;
+                        const isExhausted = count >= QUOTA_PER_MODEL;
+                        let isFailed = false;
+                        if (failures[m]) {
+                            const elapsed = now - failures[m].lastFailure;
+                            if (elapsed <= COOLDOWN_MS && failures[m].count >= FAILURE_THRESHOLD) {
+                                isFailed = true;
+                            }
+                        }
+
+                        const item = document.createElement('span');
+                        item.textContent = `${m.replace('gemini-', '')}: ${count}/${QUOTA_PER_MODEL}`;
+                        item.style.display = 'inline-block';
+                        item.style.marginRight = '8px';
+                        item.style.marginBottom = '4px';
+                        item.style.padding = '2px 6px';
+                        item.style.borderRadius = '4px';
+                        item.style.cursor = 'pointer';
+                        item.style.border = '1px solid transparent';
+                        item.style.fontSize = '11px';
+                        item.title = isFailed ? 'Model in cooldown' : (isExhausted ? 'Quota exhausted' : 'Click to prioritize');
+
+                        // Status Styling
+                        if (isExhausted || isFailed) {
+                            item.style.color = '#aaa';
+                            item.style.textDecoration = 'line-through';
+                            item.style.cursor = 'not-allowed';
+                        } else {
+                            item.style.color = '#606060';
+                            item.style.backgroundColor = '#f0f0f0';
+                        }
+
+                        // Selected Styling
+                        if (m === preferred) {
+                            item.style.borderColor = '#065fd4'; // YouTube Blue
+                            item.style.backgroundColor = '#e5f1ff';
+                            item.style.color = '#065fd4';
+                            item.style.fontWeight = '500';
+                        }
+
+                        // Interaction
+                        if (!isExhausted && !isFailed) {
+                            item.onclick = () => {
+                                if (preferred === m) {
+                                    QuotaManager.setPreferredModel(null); // Toggle off
+                                } else {
+                                    QuotaManager.setPreferredModel(m); // Select
+                                }
+                                UI.updateConversationList(listElement, conversations); // Re-render to update UI
+                            };
+                        }
+
+                        quotaInfo.appendChild(item);
                     });
-                    quotaInfo.textContent = text.slice(0, -3);
                 }
             }
             while (listElement.firstChild) {
