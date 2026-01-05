@@ -321,7 +321,7 @@
                 // Generate file download links from ready_files
                 const fileLinksHtml = Object.entries(conv.ready_files).length > 0
                     ? Object.entries(conv.ready_files).map(([uri, filepath]) => {
-                        const filename = basename(filepath);
+                        const filename = filepath.split('/').pop();
                         return `<a href="#" onclick="getConversationFiles('${conv.id}', '${filename}'); return false;" class="inline-block bg-gray-200 text-blue-600 rounded px-2 py-1 mr-1 mb-1 text-sm hover:underline">${filename}</a>`;
                     }).join('')
                     : 'None';
