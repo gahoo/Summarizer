@@ -179,9 +179,9 @@ def list_conversation_files(conversation_id):
     if not summarizer:
         return jsonify({"error": "Conversation not found"}), 404
     
-    # Get files from the summarizer
-    files = summarizer.files if isinstance(summarizer.files, list) else []
-    file_list = [{"filename": os.path.basename(f), "path": f} for f in files]
+    # Get files from the summarizer's ready_files (uri2path)
+    uri2path = summarizer.uri2path if isinstance(summarizer.uri2path, dict) else {}
+    file_list = [{"filename": os.path.basename(path), "path": path} for path in uri2path.values()]
     return jsonify(file_list), 200
 
 @app.route('/conversations/<conversation_id>/files/<filename>', methods=['GET'])
@@ -191,9 +191,9 @@ def download_conversation_file(conversation_id, filename):
     if not summarizer:
         return jsonify({"error": "Conversation not found"}), 404
     
-    # Find the file by filename
-    files = summarizer.files if isinstance(summarizer.files, list) else []
-    for file_path in files:
+    # Find the file by filename from ready_files (uri2path)
+    uri2path = summarizer.uri2path if isinstance(summarizer.uri2path, dict) else {}
+    for file_path in uri2path.values():
         if os.path.basename(file_path) == filename:
             if os.path.exists(file_path):
                 return send_file(file_path, as_attachment=True)
