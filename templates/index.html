@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,37 +14,48 @@
             height: calc(100vh - 220px);
             overflow-y: auto;
         }
-        .tooltip{
+
+        .tooltip {
             visibility: hidden;
             position: absolute;
         }
+
         .has-tooltip:hover .tooltip {
             visibility: visible;
             z-index: 100;
         }
     </style>
 </head>
+
 <body class="bg-gray-100">
     <div class="container mx-auto p-4">
         <div id="chat-container" class="chat-container bg-white rounded-lg shadow p-4 mb-4"></div>
         <div class="mb-4">
             <button id="new-conversation" class="bg-green-500 text-white rounded p-2 text-xl fa-solid fa-plus"></button>
             <button id="view-conversations" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-eye"></button>
-            <button id="save-conversation" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-floppy-disk"></button>
-            <button id="delete-conversation" class="bg-red-500 text-white rounded p-2 text-xl fa-solid fa-trash-can"></button>
-            <button id="share-conversation" class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-share-square"></button>
-            <button id="settings-button" class="bg-gray-500 text-white rounded p-2 text-xl ml-2 fa-solid fa-sliders-h"></button>
-            <button id="toggle-prompts" class="bg-gray-500 text-white rounded p-2 text-xl fa-solid fa-comment-dots"></button>
+            <button id="save-conversation"
+                class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-floppy-disk"></button>
+            <button id="delete-conversation"
+                class="bg-red-500 text-white rounded p-2 text-xl fa-solid fa-trash-can"></button>
+            <button id="share-conversation"
+                class="bg-blue-500 text-white rounded p-2 text-xl fa-solid fa-share-square"></button>
+            <button id="settings-button"
+                class="bg-gray-500 text-white rounded p-2 text-xl ml-2 fa-solid fa-sliders-h"></button>
+            <button id="toggle-prompts"
+                class="bg-gray-500 text-white rounded p-2 text-xl fa-solid fa-comment-dots"></button>
         </div>
         <div id="common-prompts" class="mb-4 flex flex-wrap gap-2 hidden"></div>
         <form id="chat-form" class="flex flex-col space-y-2">
             <div class="flex space-x-2">
-                <input type="text" id="url-input" class="border rounded p-2 flex-grow" placeholder="Enter URL" value={{urls}}>
-                <label for="file-input" class="cursor-pointer bg-blue-500 text-white text-xl rounded p-2 fa-solid fa-paperclip"></label>
+                <input type="text" id="url-input" class="border rounded p-2 flex-grow" placeholder="Enter URL"
+                    value={{urls}}>
+                <label for="file-input"
+                    class="cursor-pointer bg-blue-500 text-white text-xl rounded p-2 fa-solid fa-paperclip"></label>
                 <input type="file" id="file-input" class="hidden" multiple>
                 <button type="submit" class="bg-blue-500 text-white rounded p-2">Send</button>
             </div>
-            <textarea id="user-input" class="border rounded p-2 w-full" rows="2" placeholder="Type your message...", value={{prompt}}></textarea>
+            <textarea id="user-input" class="border rounded p-2 w-full" rows="2" placeholder="Type your message..." ,
+                value={{prompt}}></textarea>
         </form>
     </div>
 
@@ -75,7 +87,8 @@
                 </div>
                 <div class="mb-4 has-tooltip">
                     <label for="model" class="block mb-2">Model:</label>
-                    <span class='tooltip rounded shadow-lg p-1 bg-gray-100 -mt-8'>models/gemini-1.5-flash models/gemini-1.5-pro models/gemini-1.5-pro-exp-0827</span>
+                    <span class='tooltip rounded shadow-lg p-1 bg-gray-100 -mt-8'>models/gemini-1.5-flash
+                        models/gemini-1.5-pro models/gemini-1.5-pro-exp-0827</span>
                     <input type="text" id="model" name="model" class="border rounded p-2 w-full">
                 </div>
                 <div class="mb-4">
@@ -125,14 +138,16 @@
                 <div class="mb-4">
                     <label class="flex items-center">
                         Expires time:
-                        <input type="text" id="e" name="e" class="border rounded p-2" value="3d" placeholder="Expires at">
+                        <input type="text" id="e" name="e" class="border rounded p-2" value="3d"
+                            placeholder="Expires at">
                     </label>
                 </div>
                 <button type="submit" class="bg-blue-500 text-white rounded p-2 text-sm">Publish</button>
             </form>
             <div class="flex space-x-2">
                 <input type="text" id="share-url" name="share-url" class="border rounded text-sm flex-grow">
-                <button id="preview" class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-up-right-from-square"></button>
+                <button id="preview"
+                    class="bg-blue-500 text-white rounded p-2 text-sm fa-solid fa-up-right-from-square"></button>
             </div>
         </div>
     </div>
@@ -158,9 +173,10 @@
             "请将这些图片中的文字提取出来，并总结主要内容。",
             "请总结这篇文章的主要内容。",
             "请总结这篇论文的主要内容与发现。",
+            "请以类似思维导图层级笔记的形式简明扼要地总结这篇论文，内容包括重要的图表概述，知识点、研究方法、关键的核心原理、研究成果、实验数据洞察、创新点、结论。",
             "请根据视频字幕总结主持人的主要观点",
-            "请根据这篇视频转录稿总结主持人的主要观点",
-            "请根据这篇音频转录稿总结主持人的主要观点"
+            "请根据这篇转录稿总结主持人的主要观点",
+            "请用中文回答"
         ]
 
         function createCommonPrompts() {
@@ -186,7 +202,7 @@
                 const formData = new FormData();
                 Array.from(files).forEach(file => formData.append('files', file));
                 urls.forEach(url => formData.append('urls', url));
-                Object.keys(settings).forEach(key => formData.append(key, settings[key]));    
+                Object.keys(settings).forEach(key => formData.append(key, settings[key]));
 
                 response = await fetch('/conversations', {
                     method: 'POST',
@@ -279,21 +295,21 @@
             chatContainer.innerHTML = '';
         }
 
-        async function fetchConversations(offset=0, limit=10) {
+        async function fetchConversations(offset = 0, limit = 10) {
             const query_db = document.getElementById('query_db').checked;
             const filtering = document.getElementById('filtering-input').value;
-            
-            const response = await fetch(`${BASE_URL}/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`,{
-                headers: {'Authorization': `Bearer ${settings.api_key}`}
+
+            const response = await fetch(`${BASE_URL}/conversations?offset=${offset}&limit=${limit}&db=${query_db}&filtering=${filtering}`, {
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
-            
+
             if (!response.ok) {
                 throw new Error('Failed to fetch conversations');
             }
             return response.json();
         }
 
-        function formatConversations(conversations, clear=false) {
+        function formatConversations(conversations, clear = false) {
             const list = document.getElementById('conversations-list');
             if (clear) {
                 list.innerHTML = '';
@@ -310,7 +326,9 @@
                     <p><strong>Uploaded Files:</strong> ${Object.values(conv.ready_files).join(', ') || 'None'}</p>
                     <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-file-import"><button>
                     <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-share-from-square"><button>
+                    <button class="bg-green-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-download"><button>
                     <button class="bg-red-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-trash-can"><button>
+                    <div class="file-links mt-2"></div>
                 `;
                 item.querySelector('button.fa-file-import').addEventListener('click', () => {
                     currentConversationId = conv.id;
@@ -323,6 +341,12 @@
                     document.getElementById('share-modal').classList.remove('hidden');
                     document.getElementById('share-modal').classList.add('flex');
                 });
+                item.querySelector('button.fa-download').addEventListener('click', async (e) => {
+                    const button = e.target;
+                    button.classList.add('animate-bounce');
+                    await loadConversationFiles(conv.id, item.querySelector('.file-links'));
+                    setTimeout(() => { button.classList.remove('animate-bounce') }, 500);
+                });
                 item.querySelector('button.fa-trash-can').addEventListener('click', (e) => {
                     deleteConversation(conv.id);
                     e.target.parentElement.remove()
@@ -331,15 +355,15 @@
             });
         }
 
-        async function listConversations(offset=0, limit=10, clear=true) {
+        async function listConversations(offset = 0, limit = 10, clear = true) {
             try {
                 console.log(offset, limit);
                 const conversations = await fetchConversations(offset, limit);
                 formatConversations(conversations, clear);
-                if(conversations.length > 0){
+                if (conversations.length > 0) {
                     currentOffset += limit;
                     document.getElementById('load-more').classList.remove('hidden');
-                }else{
+                } else {
                     document.getElementById('load-more').classList.add('hidden');
                 }
                 document.getElementById('conversations-modal').classList.remove('hidden');
@@ -356,84 +380,125 @@
         }
 
         async function loadConversation(conversationId) {
-            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/json`,{
-                headers: {'Authorization': `Bearer ${settings.api_key}`}
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/json`, {
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
             if (!response.ok) {
                 throw new Error('Failed to load conversation');
             }
             const data = await response.json();
-            
+
             data.forEach(msg => {
-                const content = msg.parts.map(function(part){
-                    if(!part.hasOwnProperty('file_data')){
+                const content = msg.parts.map(function (part) {
+                    if (!part.hasOwnProperty('file_data')) {
                         return part
-                    }else{
+                    } else {
                         return ''
                     }
                 }).join('\n')
-                if(content != ''){
+                if (content != '') {
                     addMessageToChat(msg.role, content);
                 }
             });
         }
 
-        async function saveConversation(){
+        async function saveConversation() {
             const save_button = event.target;
             event.target.classList.add('animate-bounce');
-            
+
             const response = await fetch(`${BASE_URL}/conversations/${currentConversationId}`, {
                 method: 'PUT',
-                headers: {'Authorization': `Bearer ${settings.api_key}`}
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
 
-            setTimeout(() => {save_button.classList.remove('animate-bounce')}, 1000);
+            setTimeout(() => { save_button.classList.remove('animate-bounce') }, 1000);
             if (!response.ok) {
                 showWarningOnButton(save_button);
                 throw new Error('Failed to delete conversation');
             }
         }
 
-        async function deleteConversation(conversationId){
+        async function deleteConversation(conversationId) {
             const delete_button = event.target;
             delete_button.classList.add('animate-ping');
 
             const response = await fetch(`${BASE_URL}/conversations/${conversationId}`, {
                 method: 'DELETE',
-                headers: {'Authorization': `Bearer ${settings.api_key}`}
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
 
-            setTimeout(() => {delete_button.classList.remove('animate-ping')}, 1000);
+            setTimeout(() => { delete_button.classList.remove('animate-ping') }, 1000);
             if (!response.ok) {
                 showWarningOnButton(delete_button);
                 throw new Error('Failed to delete conversation');
-            }else{
-                if(conversationId == currentConversationId){
+            } else {
+                if (conversationId == currentConversationId) {
                     currentConversationId = null
                 }
             }
         }
 
-        async function loadConversationMarkdown(conversationId){
+        async function loadConversationMarkdown(conversationId) {
             const response = await fetch(`${BASE_URL}/conversations/${conversationId}/markdown`, {
-                headers: {'Authorization': `Bearer ${settings.api_key}`}
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
             if (!response.ok) {
                 throw new Error('Failed to load conversation markdown');
             }
-            
+
             const mobile_friendly = '<style>img { width: 95vw; } video { width: 90vw; } </style>\n\n'
             document.getElementById('markdown').value = mobile_friendly + await response.text();
         }
 
-        function applySettings(){
+        async function loadConversationFiles(conversationId, container) {
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/files`, {
+                headers: { 'Authorization': `Bearer ${settings.api_key}` }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to load conversation files');
+            }
+
+            const files = await response.json();
+            container.innerHTML = '';
+            if (files.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm">No files available</p>';
+                return;
+            }
+            files.forEach(file => {
+                const link = document.createElement('a');
+                link.href = `${BASE_URL}/conversations/${conversationId}/files/${encodeURIComponent(file.filename)}`;
+                link.className = 'inline-block bg-gray-200 text-blue-600 rounded px-2 py-1 mr-2 mb-1 text-sm hover:underline';
+                link.textContent = file.filename;
+                link.download = file.filename;
+                link.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const fileResponse = await fetch(link.href, {
+                        headers: { 'Authorization': `Bearer ${settings.api_key}` }
+                    });
+                    if (fileResponse.ok) {
+                        const blob = await fileResponse.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        a.remove();
+                    }
+                });
+                container.appendChild(link);
+            });
+        }
+
+        function applySettings() {
             Object.entries(settings).forEach(entry => {
                 const [key, value] = entry;
                 document.getElementById(key).value = value
             })
         }
 
-        function saveSettings(){
+        function saveSettings() {
             Object.entries(settings).forEach(entry => {
                 const [key, value] = entry;
                 localStorage.setItem(key, value);
@@ -442,16 +507,16 @@
 
         function updateSettingsFromParams(urlParams) {
             const valid_params = ['overwrite', 'extract_images', 'no_transcribe', 'pdf_to_markdown', 'timeout',
-            'wait_for_selector', 'targe_selector', 'removeTags', 'onlyIncludeTags', 'onlyMainContent', 'scraper', 'srt_to_txt']
-            if(urlParams.size == 0){
+                'wait_for_selector', 'targe_selector', 'removeTags', 'onlyIncludeTags', 'onlyMainContent', 'scraper', 'srt_to_txt']
+            if (urlParams.size == 0) {
                 return
             }
             urlParams.entries().forEach(entry => {
                 const [key, value] = entry;
-                if(valid_params.includes(key)){
-                    if(['true', 'false'].includes(value.toLowerCase())){
+                if (valid_params.includes(key)) {
+                    if (['true', 'false'].includes(value.toLowerCase())) {
                         settings[key] = value.toLowerCase() == 'true' ? true : false
-                    }else{
+                    } else {
                         settings[key] = value
                     }
                 }
@@ -463,18 +528,18 @@
         applySettings(settings);
 
         function showWarningOnButton(button) {
-            setTimeout(() => {button.classList.add('fa-triangle-exclamation')}, 1000);
-            setTimeout(() => {button.classList.remove('fa-triangle-exclamation')}, 5000);
+            setTimeout(() => { button.classList.add('fa-triangle-exclamation') }, 1000);
+            setTimeout(() => { button.classList.remove('fa-triangle-exclamation') }, 5000);
         }
 
-        async function submitChat(){
+        async function submitChat() {
             const userInput = document.getElementById('user-input');
             const fileInput = document.getElementById('file-input');
             const urlInput = document.getElementById('url-input');
 
             const message = userInput.value.trim();
             const files = fileInput.files;
-            const urls = urlInput.value.split(' ').filter(x => x!="");
+            const urls = urlInput.value.split(' ').filter(x => x != "");
 
             if (!message && files.length === 0 && urls.length === 0) return;
 
@@ -485,7 +550,7 @@
                     currentConversationId = await createConversation(files, urls);
                 }
 
-                if(message != ""){
+                if (message != "") {
                     const response = await sendMessage(currentConversationId, message);
                     addMessageToChat('assistant', response);
                 }
@@ -515,11 +580,11 @@
 
         document.getElementById('save-conversation').addEventListener('click', saveConversation);
 
-        document.getElementById('view-conversations').addEventListener('click', () => {listConversations()});
-        document.getElementById('query_db').addEventListener('click', () => {listConversations()});
-        document.getElementById('filtering-input').addEventListener('change', () => {listConversations()});
+        document.getElementById('view-conversations').addEventListener('click', () => { listConversations() });
+        document.getElementById('query_db').addEventListener('click', () => { listConversations() });
+        document.getElementById('filtering-input').addEventListener('change', () => { listConversations() });
 
-        document.getElementById('delete-conversation').addEventListener('click', () => {deleteConversation(currentConversationId)});
+        document.getElementById('delete-conversation').addEventListener('click', () => { deleteConversation(currentConversationId) });
 
         document.getElementById('close-conversations').addEventListener('click', () => {
             document.getElementById('conversations-modal').classList.add('hidden');
@@ -553,7 +618,7 @@
         });
 
         document.getElementById('share-conversation').addEventListener('click', async () => {
-            if(currentConversationId !== null){
+            if (currentConversationId !== null) {
                 await loadConversationMarkdown(currentConversationId);
             }
 
@@ -585,16 +650,16 @@
 
         document.getElementById('preview').addEventListener('click', () => {
             const url = document.getElementById('share-url').value;
-            if(url !== ''){
+            if (url !== '') {
                 window.open(url, '_blank');
             }
         });
 
         document.getElementById('toggle-prompts').addEventListener('click', () => {
             const prompts = document.getElementById('common-prompts');
-            if(!prompts.className.includes('hidden')){
+            if (!prompts.className.includes('hidden')) {
                 prompts.classList.add('hidden')
-            }else{
+            } else {
                 prompts.classList.remove('hidden')
             }
         });
@@ -603,7 +668,7 @@
             const modalContent = document.querySelector('#conversations-modal > div');
             modalContent.addEventListener('scrollend', async () => {
                 if (modalContent.scrollTop + modalContent.clientHeight >= modalContent.scrollHeight - 10) {
-                    listConversations(currentOffset, 4, clear=false);
+                    listConversations(currentOffset, 4, clear = false);
                 }
             });
         }
@@ -631,11 +696,11 @@
             setupInfiniteScroll();
         });
 
-        window.onclick = function(event) {
-                if (event.target.id.endsWith('-modal')) {
-                    event.target.classList.add('hidden');
-                }
-            };
+        window.onclick = function (event) {
+            if (event.target.id.endsWith('-modal')) {
+                event.target.classList.add('hidden');
+            }
+        };
 
         // Service Worker Registration
         if ('serviceWorker' in navigator) {
@@ -651,4 +716,5 @@
         }
     </script>
 </body>
+
 </html>

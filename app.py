@@ -172,6 +172,36 @@ def get_conversation_markdown(conversation_id):
     
     return summarizer.markdown, 200, {'Content-Type': 'text/markdown'}
 
+@app.route('/conversations/<conversation_id>/files', methods=['GET'])
+@auth.login_required
+def list_conversation_files(conversation_id):
+    summarizer = get_summarizer(conversation_id)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    # Get files from the summarizer
+    files = summarizer.files if isinstance(summarizer.files, list) else []
+    file_list = [{"filename": os.path.basename(f), "path": f} for f in files]
+    return jsonify(file_list), 200
+
+@app.route('/conversations/<conversation_id>/files/<filename>', methods=['GET'])
+@auth.login_required
+def download_conversation_file(conversation_id, filename):
+    summarizer = get_summarizer(conversation_id)
+    if not summarizer:
+        return jsonify({"error": "Conversation not found"}), 404
+    
+    # Find the file by filename
+    files = summarizer.files if isinstance(summarizer.files, list) else []
+    for file_path in files:
+        if os.path.basename(file_path) == filename:
+            if os.path.exists(file_path):
+                return send_file(file_path, as_attachment=True)
+            else:
+                return jsonify({"error": "File not found on disk"}), 404
+    
+    return jsonify({"error": "File not found in conversation"}), 404
+
 @app.route('/')
 @app.route('/index.html')
 def index():
