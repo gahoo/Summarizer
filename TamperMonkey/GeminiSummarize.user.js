@@ -436,11 +436,18 @@
             openYoutubeLink.appendChild(youtubeIcon);
             openYoutubeLink.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-s yt-spec-button-shape-next--icon-button';
 
+            const downloadSubButton = document.createElement('button');
+            downloadSubButton.id = 'gemini-download-subtitle';
+            downloadSubButton.textContent = '📥';
+            downloadSubButton.title = 'Download subtitle file';
+            downloadSubButton.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-s yt-spec-button-shape-next--icon-button';
+
             const exportButtonContainer = document.createElement('div');
             exportButtonContainer.id = 'gemini-export-button-container';
             exportButtonContainer.appendChild(openYoutubeLink);
             exportButtonContainer.appendChild(exportPastebinButton);
             exportButtonContainer.appendChild(exportButton);
+            exportButtonContainer.appendChild(downloadSubButton);
 
             const shareUrlContainer = document.createElement('div');
             shareUrlContainer.id = 'gemini-share-url-container';
@@ -679,6 +686,54 @@
                             resolve(JSON.parse(response.responseText));
                         } else {
                             reject(new Error(`${response.statusText}: ${response.responseText}`));
+                        }
+                    },
+                    onerror: (error) => reject(error)
+                });
+            });
+        }
+
+        static listConversationFiles(conversationId) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: `${BASE_URL}/conversations/${conversationId}/files`,
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            resolve(JSON.parse(response.responseText));
+                        } else {
+                            reject(new Error(response.statusText));
+                        }
+                    },
+                    onerror: (error) => reject(error)
+                });
+            });
+        }
+
+        static downloadConversationFile(conversationId, filename) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: `${BASE_URL}/conversations/${conversationId}/files/${encodeURIComponent(filename)}`,
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    responseType: 'blob',
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            const blob = response.response;
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                            resolve();
+                        } else {
+                            reject(new Error(response.statusText));
                         }
                     },
                     onerror: (error) => reject(error)
@@ -976,6 +1031,7 @@
         const input = modal.querySelector('#gemini-chat-input');
         const exportButton = modal.querySelector('#gemini-export-obsidian');
         const exportPastebinButton = modal.querySelector('#gemini-export-pastebin');
+        const downloadSubButton = modal.querySelector('#gemini-download-subtitle');
         const openYoutubeLink = modal.querySelector('#gemini-open-youtube');
         const shareUrlContainer = modal.querySelector('#gemini-share-url-container');
         const shareUrlInput = modal.querySelector('#gemini-share-url');
@@ -1097,6 +1153,17 @@ tags:
 `;
             const fileContent = frontmatter + markdown;
             obsidianUtils.saveToObsidian(fileContent, conv ? conv.title : 'YouTube Summary');
+        };
+
+        downloadSubButton.onclick = async () => {
+            try {
+                const files = await GeminiAPI.listConversationFiles(conversationId);
+                if (files.length > 0) {
+                    await GeminiAPI.downloadConversationFile(conversationId, files[0].filename);
+                }
+            } catch (error) {
+                console.error('Error downloading subtitle:', error);
+            }
         };
 
         exportPastebinButton.onclick = async () => {
