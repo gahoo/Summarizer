@@ -318,17 +318,22 @@
             conversations.forEach(conv => {
                 const item = document.createElement('div');
                 item.className = 'mb-4 p-2 border rounded';
+                // Generate file download links from ready_files
+                const fileLinksHtml = Object.entries(conv.ready_files).length > 0
+                    ? Object.entries(conv.ready_files).map(([uri, filename]) =>
+                        `<a href="#" onclick="getConversationFiles('${conv.id}', '${filename}'); return false;" class="inline-block bg-gray-200 text-blue-600 rounded px-2 py-1 mr-1 mb-1 text-sm hover:underline">${filename}</a>`
+                    ).join('')
+                    : 'None';
+
                 item.innerHTML = `
                     <p><strong>ID:</strong> ${conv.id}</p>
                     <p><strong>Timestamp:</strong> ${new Date(conv.timestamp).toISOString()}</p>
                     <p><strong>URLs:</strong> ${conv.urls.join(', ') || 'None'}</p>
                     <p><strong>Files:</strong> ${conv.files.join(', ') || 'None'}</p>
-                    <p><strong>Uploaded Files:</strong> ${Object.values(conv.ready_files).join(', ') || 'None'}</p>
+                    <p><strong>Uploaded Files:</strong> ${fileLinksHtml}</p>
                     <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-file-import"><button>
                     <button class="bg-blue-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-share-from-square"><button>
-                    <button class="bg-green-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-download"><button>
                     <button class="bg-red-500 text-white rounded p-2 mr-2 text-xl fa-solid fa-trash-can"><button>
-                    <div class="file-links mt-2"></div>
                 `;
                 item.querySelector('button.fa-file-import').addEventListener('click', () => {
                     currentConversationId = conv.id;
@@ -341,12 +346,7 @@
                     document.getElementById('share-modal').classList.remove('hidden');
                     document.getElementById('share-modal').classList.add('flex');
                 });
-                item.querySelector('button.fa-download').addEventListener('click', async (e) => {
-                    const button = e.target;
-                    button.classList.add('animate-bounce');
-                    await loadConversationFiles(conv.id, item.querySelector('.file-links'));
-                    setTimeout(() => { button.classList.remove('animate-bounce') }, 500);
-                });
+
                 item.querySelector('button.fa-trash-can').addEventListener('click', (e) => {
                     deleteConversation(conv.id);
                     e.target.parentElement.remove()
@@ -450,45 +450,22 @@
             document.getElementById('markdown').value = mobile_friendly + await response.text();
         }
 
-        async function loadConversationFiles(conversationId, container) {
-            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/files`, {
+        function downloadBlob(blob, filename) {
+            const a = Object.assign(document.createElement('a'), {
+                href: URL.createObjectURL(blob),
+                download: filename
+            });
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        async function getConversationFiles(conversationId, filename) {
+            const response = await fetch(`${BASE_URL}/conversations/${conversationId}/files/${encodeURIComponent(filename)}`, {
                 headers: { 'Authorization': `Bearer ${settings.api_key}` }
             });
-            if (!response.ok) {
-                throw new Error('Failed to load conversation files');
+            if (response.ok) {
+                downloadBlob(await response.blob(), filename);
             }
-
-            const files = await response.json();
-            container.innerHTML = '';
-            if (files.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-sm">No files available</p>';
-                return;
-            }
-            files.forEach(file => {
-                const link = document.createElement('a');
-                link.href = `${BASE_URL}/conversations/${conversationId}/files/${encodeURIComponent(file.filename)}`;
-                link.className = 'inline-block bg-gray-200 text-blue-600 rounded px-2 py-1 mr-2 mb-1 text-sm hover:underline';
-                link.textContent = file.filename;
-                link.download = file.filename;
-                link.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    const fileResponse = await fetch(link.href, {
-                        headers: { 'Authorization': `Bearer ${settings.api_key}` }
-                    });
-                    if (fileResponse.ok) {
-                        const blob = await fileResponse.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = file.filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        a.remove();
-                    }
-                });
-                container.appendChild(link);
-            });
         }
 
         function applySettings() {
