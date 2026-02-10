@@ -239,6 +239,65 @@
             const list = document.createElement('div');
             list.id = 'gemini-conversation-list';
 
+            // --- History Toggle & Container ---
+            const historyToggle = document.createElement('button');
+            historyToggle.id = 'gemini-history-toggle';
+            historyToggle.textContent = 'History';
+            historyToggle.style.fontSize = '12px';
+            historyToggle.style.padding = '2px 8px';
+            historyToggle.style.cursor = 'pointer';
+            historyToggle.style.border = '1px solid #ddd';
+            historyToggle.style.borderRadius = '4px';
+            historyToggle.style.background = 'transparent';
+            historyToggle.style.color = '#606060';
+
+            const historyContainer = document.createElement('div');
+            historyContainer.id = 'gemini-history-container';
+            historyContainer.style.display = 'none';
+
+            const historyList = document.createElement('div');
+            historyList.id = 'gemini-history-list';
+            historyContainer.appendChild(historyList);
+
+            let historyOffset = 0;
+            const historyLimit = 20;
+            let historyLoading = false;
+            let historyHasMore = true;
+
+            async function loadHistory(append = false) {
+                if (historyLoading || !historyHasMore) return;
+                historyLoading = true;
+                try {
+                    const data = await GeminiAPI.fetchConversations(historyOffset, historyLimit);
+                    UI.renderHistoryList(historyList, data, append);
+                    if (data.length < historyLimit) {
+                        historyHasMore = false;
+                    }
+                    historyOffset += data.length;
+                } catch (e) {
+                    console.error('GeminiSummarize: Error loading history:', e);
+                } finally {
+                    historyLoading = false;
+                }
+            }
+
+            // Lazy load: scroll to bottom triggers next page
+            historyContainer.addEventListener('scroll', () => {
+                if (historyContainer.scrollTop + historyContainer.clientHeight >= historyContainer.scrollHeight - 10) {
+                    loadHistory(true);
+                }
+            });
+
+            historyToggle.addEventListener('click', () => {
+                const isVisible = historyContainer.style.display !== 'none';
+                historyContainer.style.display = isVisible ? 'none' : 'block';
+                historyToggle.classList.toggle('active', !isVisible);
+                if (!isVisible && historyOffset === 0) {
+                    loadHistory(false);
+                }
+            });
+            // --- End History ---
+
             const quotaInfo = document.createElement('div');
             quotaInfo.id = 'gemini-quota-info';
             quotaInfo.style.fontSize = '12px';
@@ -268,12 +327,19 @@
             footerContainer.style.marginTop = '15px';
             footerContainer.style.paddingTop = '10px';
             footerContainer.style.borderTop = '1px solid #eee';
+            const buttonGroup = document.createElement('div');
+            buttonGroup.style.display = 'flex';
+            buttonGroup.style.gap = '6px';
+            buttonGroup.appendChild(historyToggle);
+            buttonGroup.appendChild(resetBtn);
+
             footerContainer.appendChild(quotaInfo);
-            footerContainer.appendChild(resetBtn);
+            footerContainer.appendChild(buttonGroup);
 
             modalContent.appendChild(closeButton);
             modalContent.appendChild(title);
             modalContent.appendChild(list);
+            modalContent.appendChild(historyContainer);
             modalContent.appendChild(footerContainer);
             modal.appendChild(modalContent);
             document.body.appendChild(modal);
@@ -379,6 +445,63 @@
 
                 // Set the initial UI state (icon, cursor, click event)
                 updateUIForConversation(conv);
+            });
+        }
+
+        static renderHistoryList(container, conversations, append = false) {
+            if (!append) {
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
+            }
+            conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'conversation-item';
+                item.style.flexDirection = 'column';
+                item.style.alignItems = 'flex-start';
+
+                const topLine = document.createElement('div');
+                topLine.style.display = 'flex';
+                topLine.style.justifyContent = 'space-between';
+                topLine.style.width = '100%';
+                topLine.style.alignItems = 'center';
+
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'conversation-title';
+                const urlText = (conv.urls && conv.urls.length > 0) ? conv.urls[0] : 'No URL';
+                const ts = new Date(conv.timestamp).toLocaleDateString();
+                titleSpan.textContent = `${ts} · ${urlText}`;
+
+                const statusIcon = document.createElement('span');
+                statusIcon.className = 'conversation-status-icon';
+                statusIcon.textContent = '📖';
+
+                topLine.appendChild(titleSpan);
+                topLine.appendChild(statusIcon);
+                item.appendChild(topLine);
+
+                // Show uploaded files if available
+                const readyFiles = conv.ready_files && typeof conv.ready_files === 'object' ? Object.values(conv.ready_files) : [];
+                if (readyFiles.length > 0) {
+                    const filesLine = document.createElement('div');
+                    filesLine.style.fontSize = '11px';
+                    filesLine.style.color = '#888';
+                    filesLine.style.marginTop = '4px';
+                    readyFiles.forEach(fp => {
+                        const tag = document.createElement('span');
+                        tag.textContent = fp.split('/').pop();
+                        tag.style.marginRight = '6px';
+                        tag.style.padding = '1px 4px';
+                        tag.style.borderRadius = '3px';
+                        tag.style.backgroundColor = 'var(--yt-spec-badge-chip-background, #f0f0f0)';
+                        filesLine.appendChild(tag);
+                    });
+                    item.appendChild(filesLine);
+                }
+
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => openChatModal(conv.id));
+                container.appendChild(item);
             });
         }
 
@@ -732,6 +855,26 @@
                             a.click();
                             URL.revokeObjectURL(url);
                             resolve();
+                        } else {
+                            reject(new Error(response.statusText));
+                        }
+                    },
+                    onerror: (error) => reject(error)
+                });
+            });
+        }
+
+        static fetchConversations(offset = 0, limit = 20) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: `${BASE_URL}/conversations?offset=${offset}&limit=${limit}&db=true&filtering=youtube.com`,
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            resolve(JSON.parse(response.responseText));
                         } else {
                             reject(new Error(response.statusText));
                         }
@@ -1398,6 +1541,17 @@ tags:
             #gemini-chat-send {
                 flex-grow: 0.1 !important;
                 flex-shrink: 0 !important;
+            }
+            #gemini-history-toggle.active {
+                background-color: var(--yt-spec-badge-chip-background, #e5e5e5);
+                border-color: var(--yt-spec-text-primary, #0f0f0f) !important;
+                color: var(--yt-spec-text-primary, #0f0f0f) !important;
+            }
+            #gemini-history-container {
+                max-height: 50vh;
+                overflow-y: auto;
+                border-top: 1px solid var(--yt-spec-divider-subtle, #eee);
+                padding-top: 10px;
             }
         `);
 
