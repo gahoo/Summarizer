@@ -8,7 +8,7 @@ RUN pip install pyuwsgi
 FROM python:3.14.0-slim-bookworm
 
 RUN apt update && \
-    apt install -y unzip wget xz-utils libxml2 zlib1g libxslt1.1 libmagic-dev curl
+    apt install -y unzip wget xz-utils libxml2 zlib1g libxslt1.1 libexpat1 libmagic-dev curl
 
 RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz && \
     tar -xf ffmpeg-release-arm64-static.tar.xz && \
