@@ -143,6 +143,33 @@
         },
     };
 
+    // --- Failed List Manager ---
+    const FailedListManager = {
+        _key: 'gemini_failed_list',
+        getList() {
+            return GM_getValue(this._key, []);
+        },
+        _save(list) {
+            GM_setValue(this._key, list);
+        },
+        add(url, title) {
+            const list = this.getList();
+            if (list.some(item => item.url === url)) return; // dedupe
+            list.push({ url, title, timestamp: Date.now() });
+            this._save(list);
+        },
+        remove(url) {
+            const list = this.getList().filter(item => item.url !== url);
+            this._save(list);
+        },
+        clear() {
+            this._save([]);
+        },
+        exportLinks() {
+            return this.getList().map(item => item.url).join('\n');
+        }
+    };
+
     // --- UTILS ---
     function debounce(func, wait) {
         let timeout;
@@ -295,8 +322,84 @@
                 if (!isVisible && historyOffset === 0) {
                     loadHistory(false);
                 }
+                updateListHeights();
             });
             // --- End History ---
+
+            // Helper: dynamically adjust list heights based on expanded containers
+            function updateListHeights() {
+                const historyExpanded = historyContainer.style.display !== 'none';
+                const failedExpanded = failedContainer.style.display !== 'none';
+                const expandedCount = (historyExpanded ? 1 : 0) + (failedExpanded ? 1 : 0);
+
+                if (expandedCount === 0) {
+                    list.style.maxHeight = '70vh';
+                } else if (expandedCount === 1) {
+                    list.style.maxHeight = '30vh';
+                } else {
+                    list.style.maxHeight = '20vh';
+                }
+            }
+
+            // --- Failed List Toggle & Container ---
+            const failedToggle = document.createElement('button');
+            failedToggle.id = 'gemini-failed-toggle';
+            failedToggle.textContent = 'Failed';
+            failedToggle.style.fontSize = '12px';
+            failedToggle.style.padding = '2px 8px';
+            failedToggle.style.cursor = 'pointer';
+            failedToggle.style.border = '1px solid #ddd';
+            failedToggle.style.borderRadius = '4px';
+            failedToggle.style.background = 'transparent';
+            failedToggle.style.color = '#606060';
+
+            const failedContainer = document.createElement('div');
+            failedContainer.id = 'gemini-failed-container';
+            failedContainer.style.display = 'none';
+
+            const failedList = document.createElement('div');
+            failedList.id = 'gemini-failed-list';
+
+            const failedGlobalActions = document.createElement('div');
+            failedGlobalActions.className = 'gemini-failed-global-actions';
+
+            const clearAllBtn = document.createElement('button');
+            clearAllBtn.textContent = 'Clear All';
+            clearAllBtn.className = 'gemini-small-btn';
+            clearAllBtn.addEventListener('click', () => {
+                FailedListManager.clear();
+                UI.renderFailedList(failedList);
+            });
+
+            const exportBtn = document.createElement('button');
+            exportBtn.textContent = 'Export';
+            exportBtn.className = 'gemini-small-btn';
+            exportBtn.addEventListener('click', () => {
+                const links = FailedListManager.exportLinks();
+                if (links) {
+                    navigator.clipboard.writeText(links).then(() => {
+                        exportBtn.textContent = 'Copied!';
+                        setTimeout(() => { exportBtn.textContent = 'Export'; }, 1500);
+                    });
+                }
+            });
+
+            failedGlobalActions.appendChild(clearAllBtn);
+            failedGlobalActions.appendChild(exportBtn);
+
+            failedContainer.appendChild(failedList);
+            failedContainer.appendChild(failedGlobalActions);
+
+            failedToggle.addEventListener('click', () => {
+                const isVisible = failedContainer.style.display !== 'none';
+                failedContainer.style.display = isVisible ? 'none' : 'block';
+                failedToggle.classList.toggle('active', !isVisible);
+                if (!isVisible) {
+                    UI.renderFailedList(failedList);
+                }
+                updateListHeights();
+            });
+            // --- End Failed List ---
 
             const quotaInfo = document.createElement('div');
             quotaInfo.id = 'gemini-quota-info';
@@ -330,6 +433,7 @@
             const buttonGroup = document.createElement('div');
             buttonGroup.style.display = 'flex';
             buttonGroup.style.gap = '6px';
+            buttonGroup.appendChild(failedToggle);
             buttonGroup.appendChild(historyToggle);
             buttonGroup.appendChild(resetBtn);
 
@@ -340,6 +444,7 @@
             modalContent.appendChild(title);
             modalContent.appendChild(list);
             modalContent.appendChild(historyContainer);
+            modalContent.appendChild(failedContainer);
             modalContent.appendChild(footerContainer);
             modal.appendChild(modalContent);
             document.body.appendChild(modal);
@@ -352,6 +457,7 @@
                     modal.style.display = 'none';
                 }
             });
+            updateListHeights();
             return modal;
         }
 
@@ -445,6 +551,112 @@
 
                 // Set the initial UI state (icon, cursor, click event)
                 updateUIForConversation(conv);
+            });
+        }
+
+        static renderFailedList(container) {
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            const failedItems = FailedListManager.getList();
+            if (failedItems.length === 0) {
+                const empty = document.createElement('div');
+                empty.textContent = 'No failed items.';
+                empty.style.color = '#888';
+                empty.style.fontSize = '13px';
+                empty.style.padding = '8px';
+                container.appendChild(empty);
+                return;
+            }
+            failedItems.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'gemini-failed-item';
+
+                const info = document.createElement('div');
+                info.className = 'gemini-failed-item-info';
+
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'gemini-failed-item-title';
+                titleSpan.textContent = item.title || 'Unknown';
+
+                const urlSpan = document.createElement('span');
+                urlSpan.className = 'gemini-failed-item-url';
+                urlSpan.textContent = item.url;
+
+                info.appendChild(titleSpan);
+                info.appendChild(urlSpan);
+
+                const actions = document.createElement('div');
+                actions.className = 'gemini-failed-item-actions';
+
+                // Retry button
+                const retryBtn = document.createElement('button');
+                retryBtn.textContent = '🔄';
+                retryBtn.title = 'Retry';
+                retryBtn.className = 'gemini-small-btn';
+                retryBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    let conv = conversations.find(c => c.url === item.url);
+                    if (!conv) {
+                        conv = {
+                            title: item.title,
+                            url: item.url,
+                            status: 'pending',
+                            id: null,
+                            ui: { button: null, listItem: null }
+                        };
+                        conversations.push(conv);
+                    } else {
+                        conv.status = 'pending';
+                    }
+                    requestQueue.push({ url: item.url });
+                    updateUIForConversation(conv);
+                    processQueue();
+                    row.remove();
+                });
+
+                // Open in new tab button
+                const openBtn = document.createElement('button');
+                openBtn.textContent = '🔗';
+                openBtn.title = 'Open in new tab';
+                openBtn.className = 'gemini-small-btn';
+                openBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    window.open(item.url, '_blank');
+                });
+
+                // Copy URL button
+                const copyBtn = document.createElement('button');
+                copyBtn.textContent = '📋';
+                copyBtn.title = 'Copy URL';
+                copyBtn.className = 'gemini-small-btn';
+                copyBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(item.url).then(() => {
+                        copyBtn.textContent = '✓';
+                        setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
+                    });
+                });
+
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '✖';
+                deleteBtn.title = 'Remove';
+                deleteBtn.className = 'gemini-small-btn';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    FailedListManager.remove(item.url);
+                    row.remove();
+                });
+
+                actions.appendChild(retryBtn);
+                actions.appendChild(openBtn);
+                actions.appendChild(copyBtn);
+                actions.appendChild(deleteBtn);
+
+                row.appendChild(info);
+                row.appendChild(actions);
+                container.appendChild(row);
             });
         }
 
@@ -977,12 +1189,14 @@
                 conversationEntry.status = 'success';
                 updateUIForConversation(conversationEntry);
                 GeminiAPI.saveConversation(conversationEntry.id);
+                FailedListManager.remove(url);
             })
             .catch(error => {
                 // Catches errors from any of the steps
                 console.error('Error during conversation processing:', error);
                 conversationEntry.status = 'error';
                 updateUIForConversation(conversationEntry);
+                FailedListManager.add(url, conversationEntry.title);
             })
             .finally(() => {
                 isProcessing = false;
@@ -1378,8 +1592,7 @@ tags:
                 background-color: rgba(0,0,0,0.6) !important;
             }
             #gemini-conversation-list {
-                max-height: 80vh;
-                overflow-y: scroll;
+                overflow-y: auto;
             }
             #gemini-conversation-list-modal {
                 z-index: 10000;
@@ -1547,11 +1760,64 @@ tags:
                 border-color: var(--yt-spec-text-primary, #0f0f0f) !important;
                 color: var(--yt-spec-text-primary, #0f0f0f) !important;
             }
-            #gemini-history-container {
+            #gemini-history-container, #gemini-failed-container {
                 max-height: 50vh;
                 overflow-y: auto;
                 border-top: 1px solid var(--yt-spec-divider-subtle, #eee);
                 padding-top: 10px;
+            }
+            #gemini-failed-toggle.active {
+                background-color: var(--yt-spec-badge-chip-background, #e5e5e5);
+                border-color: var(--yt-spec-text-primary, #0f0f0f) !important;
+                color: var(--yt-spec-text-primary, #0f0f0f) !important;
+            }
+            .gemini-failed-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px;
+                border-bottom: 1px solid var(--yt-spec-divider-subtle, #eee);
+            }
+            .gemini-failed-item-info {
+                flex: 1;
+                min-width: 0;
+                margin-right: 8px;
+            }
+            .gemini-failed-item-title {
+                display: block;
+                font-size: 13px;
+                color: var(--yt-spec-text-primary, #0f0f0f);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .gemini-failed-item-url {
+                display: block;
+                font-size: 11px;
+                color: #888;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .gemini-failed-item-actions {
+                display: flex;
+                gap: 4px;
+                flex-shrink: 0;
+            }
+            .gemini-small-btn {
+                font-size: 12px;
+                padding: 2px 8px;
+                cursor: pointer;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: transparent;
+                color: #606060;
+            }
+            .gemini-failed-global-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 6px;
+                padding: 8px 0;
             }
         `);
 
